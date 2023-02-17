@@ -253,10 +253,37 @@ handle_child_status(pid_t pid, int status)
      *         If a process was stopped, save the terminal state.
      */
 
-    struct job newJobStructure;
-    newJobStructure.jid = pid;
+     struct job* newJobStructure = get_job_from_jid(pid);
+   
+// Checks to see if process was stopped by a signal
+    if (WIFSTOPPED(status)) {
+        if (WSTOPSIG(status) == SIGTSTP) {
 
-    
+        }
+        else if (WSTOPSIG(status) == SIGTTOU ||WSTOPSIG(status) == SIGTTIN){
+
+        }
+        }
+// Checks to see if the process is terminated normally 
+    else if (WIFEXITED(status)) {
+
+    }
+    // Checks to see if the process was terminated by signal 
+    else if (WIFSIGNALED(status)) {
+        if (WTERMSIG(status) == SIGINT) {
+
+        }
+        else if (WTERMSIG(status) ==SIGTERM) {
+
+        }
+        else if (WTERMSIG(status) == SIGKILL) {
+
+        }
+        else {
+
+        }
+    }
+
 
 }
 
@@ -330,35 +357,16 @@ main(int ac, char *av[])
             for (a = list_begin (&pipee->commands); a != list_end (&pipee->commands); a = list_next (a)) {
             struct ast_command *command = list_entry(a,  struct ast_command, elem);
             
-                printf("Here you go: %s\n", command->argv[0]);
+            
                 if (strcmp(command->argv[0], "exit") == 0) {
                     exit(0);
                 }
 
             }
           
-          
+
         }
     
-        // if (strcmp(list_front(&cline->pipes), "jobs") == 0) {
-        //     printf("YESSIR\n");
-        // }
-       
-    // if (list_front(&cline->pipes) != list_front(&cline->pipes)) {
-    //     printf("YESSIR\n");
-    // }
-    //  char    readbuffer[80];
-    //        int nbytes = read(, readbuffer, sizeof(readbuffer));
-    //             readbuffer[nbytes] = '\0';
-    //             printf("Received string: %s \n", readbuffer);
-    //     }
-    // for (int i = 0; i < 10; i++) {
-
-    // }
-    
-
-
-
         //taking input from shell and printing it back, so from here you want to write logic of spawning a new process and handeling it down
         //ast_command_line_run
         //assigning process group ids, assigning pipes 
