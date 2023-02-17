@@ -257,32 +257,67 @@ handle_child_status(pid_t pid, int status)
    
 // Checks to see if process was stopped by a signal
     if (WIFSTOPPED(status)) {
-        if (WSTOPSIG(status) == SIGTSTP) {
 
+        if (WSTOPSIG(status) == SIGTSTP || WSTOPSIG(status) == SIGSTOP) {
+            newJobStructure->status = STOPPED;
+            // newJobStructure->num_processes_alive--;
+            //  termstate_save(newJobStructure);
+            //   termstate_give_terminal_back_to_shell();
+            
         }
-        else if (WSTOPSIG(status) == SIGTTOU ||WSTOPSIG(status) == SIGTTIN){
+        // else if () {
+        //     newJobStructure->status = STOPPED;
+        //     newJobStructure->num_processes_alive--;
+        //      termstate_save(newJobStructure);
+        //       termstate_give_terminal_back_to_shell();
 
+        // }
+        else if (WSTOPSIG(status) == SIGTTOU || WSTOPSIG(status) == SIGTTIN){
+             newJobStructure->status = NEEDSTERMINAL;
+             
+            //   termstate_give_terminal_back_to_shell();
         }
-        }
+        termstate_save(&newJobStructure->saved_tty_state);
+    }
 // Checks to see if the process is terminated normally 
-    else if (WIFEXITED(status)) {
-
+    else if (WIFEXITED(status) || WIFSIGNALED(status)) {
+        newJobStructure->num_processes_alive--;
+        if (newJobStructure->status == FOREGROUND) {
+            termstate_sample();
+        }
+        int term_sig = WTERMSIG(status);
+        if (term_sig == SIGKILL || term_sig == SIGTERM) {
+            if (newJobStructure->status == FOREGROUND)
+                printf("Killed\n");
+        }else if (term_sig == SIGFPE && newJobStructure->status == FOREGROUND) {
+                printf("Floating Point exception\n");
+        }else if (term_sig == SIGSEGV && newJobStructure->status == FOREGROUND) {
+                printf("Segmentation Fault\n");
+        }else if (term_sig == SIGABRT && newJobStructure->status == FOREGROUND) {
+                printf("Aborted\n");
+        }
+    }
+    else {
+        printf("Unknown child stats\n");
     }
     // Checks to see if the process was terminated by signal 
-    else if (WIFSIGNALED(status)) {
-        if (WTERMSIG(status) == SIGINT) {
+    // else if (WIFSIGNALED(status)) {
+    //     if (WTERMSIG(status) == SIGINT) {
+    //         newJobStructure->status = FOREGROUND;
+    //         termstate_save(newJobStructure);
+    //         newJobStructure->num_processes_alive--;
+    //           termstate_give_terminal_back_to_shell();
+    //     }
+    //     else if (WTERMSIG(status) ==SIGTERM) {
+            
+    //     }
+    //     else if (WTERMSIG(status) == SIGKILL) {
 
-        }
-        else if (WTERMSIG(status) ==SIGTERM) {
+    //     }
+    //     else {
 
-        }
-        else if (WTERMSIG(status) == SIGKILL) {
-
-        }
-        else {
-
-        }
-    }
+    //     }
+    // }
 
 
 }
