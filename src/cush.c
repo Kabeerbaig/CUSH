@@ -253,6 +253,73 @@ handle_child_status(pid_t pid, int status)
      *         If a process was stopped, save the terminal state.
      */
 
+     struct job* newJobStructure = get_job_from_jid(pid);
+   
+// Checks to see if process was stopped by a signal
+    if (WIFSTOPPED(status)) {
+
+        if (WSTOPSIG(status) == SIGTSTP || WSTOPSIG(status) == SIGSTOP) {
+            newJobStructure->status = STOPPED;
+            // newJobStructure->num_processes_alive--;
+            //  termstate_save(newJobStructure);
+            //   termstate_give_terminal_back_to_shell();
+            
+        }
+        // else if () {
+        //     newJobStructure->status = STOPPED;
+        //     newJobStructure->num_processes_alive--;
+        //      termstate_save(newJobStructure);
+        //       termstate_give_terminal_back_to_shell();
+
+        // }
+        else if (WSTOPSIG(status) == SIGTTOU || WSTOPSIG(status) == SIGTTIN){
+             newJobStructure->status = NEEDSTERMINAL;
+             
+            //   termstate_give_terminal_back_to_shell();
+        }
+        termstate_save(&newJobStructure->saved_tty_state);
+    }
+// Checks to see if the process is terminated normally 
+    else if (WIFEXITED(status) || WIFSIGNALED(status)) {
+        newJobStructure->num_processes_alive--;
+        if (newJobStructure->status == FOREGROUND) {
+            termstate_sample();
+        }
+        int term_sig = WTERMSIG(status);
+        if (term_sig == SIGKILL || term_sig == SIGTERM) {
+            if (newJobStructure->status == FOREGROUND)
+                printf("Killed\n");
+        }else if (term_sig == SIGFPE && newJobStructure->status == FOREGROUND) {
+                printf("Floating Point exception\n");
+        }else if (term_sig == SIGSEGV && newJobStructure->status == FOREGROUND) {
+                printf("Segmentation Fault\n");
+        }else if (term_sig == SIGABRT && newJobStructure->status == FOREGROUND) {
+                printf("Aborted\n");
+        }
+    }
+    else {
+        printf("Unknown child stats\n");
+    }
+    // Checks to see if the process was terminated by signal 
+    // else if (WIFSIGNALED(status)) {
+    //     if (WTERMSIG(status) == SIGINT) {
+    //         newJobStructure->status = FOREGROUND;
+    //         termstate_save(newJobStructure);
+    //         newJobStructure->num_processes_alive--;
+    //           termstate_give_terminal_back_to_shell();
+    //     }
+    //     else if (WTERMSIG(status) ==SIGTERM) {
+            
+    //     }
+    //     else if (WTERMSIG(status) == SIGKILL) {
+
+    //     }
+    //     else {
+
+    //     }
+    // }
+
+
 }
 
 int
@@ -268,7 +335,7 @@ main(int ac, char *av[])
             break;
         }
     }
-
+    
     list_init(&job_list);
     signal_set_handler(SIGCHLD, sigchld_handler);
     termstate_init();
@@ -296,11 +363,13 @@ main(int ac, char *av[])
         char * prompt = isatty(0) ? build_prompt() : NULL;
         char * cmdline = readline(prompt);
         free (prompt);
-
+    
         if (cmdline == NULL)  /* User typed EOF */
             break;
 
         struct ast_command_line * cline = ast_parse_command_line(cmdline);
+        
+        (ast_command_line_print(cline));
         free (cmdline);
         if (cline == NULL)                  /* Error in command line */
             continue;
@@ -309,9 +378,52 @@ main(int ac, char *av[])
             ast_command_line_free(cline);
             continue;
         }
+        
+   
+    list_front(&cline->pipes);
+// This is where the loop starts to find the first command passed in from the cush
+// We loop through the pipeline to find the fist command and check to see if the command is a built in or requires posix spawn
+    struct list_elem *e;
 
-        ast_command_line_print(cline);      /* Output a representation of
-                                               the entered command line */
+      for (e = list_begin (&cline->pipes); e != list_end (&cline->pipes); e = list_next (e))
+        {
+             struct ast_pipeline *pipee = list_entry (e, struct ast_pipeline, elem);
+             struct list_elem *a;
+            for (a = list_begin (&pipee->commands); a != list_end (&pipee->commands); a = list_next (a)) {
+            struct ast_command *command = list_entry(a,  struct ast_command, elem);
+            
+            
+                if (strcmp(command->argv[0], "exit") == 0) {
+                    exit(0);
+                }
+
+            }
+          
+
+        }
+    
+        //taking input from shell and printing it back, so from here you want to write logic of spawning a new process and handeling it down
+        //ast_command_line_run
+        //assigning process group ids, assigning pipes 
+        //lots of built ins as well, gcc based function or kill,...
+        //not spawn child for specific command kill, jobs, come a bit later in the code with just a if else check
+        //keep track of pid in array 
+        //first command redirect standard out when it is a regular command
+       // ast_command_line_print(cline);      /* Output a representation of
+                                               //the entered command line */
+       // printf("The command is: %s\n", );
+        // char* jobarry[5];
+        // for (int i = 0; i < ac; i++) {
+        //     jobarry[i] = av[i];
+        // }
+
+        // if (strcmp(av[1], "jobs") == 0) {
+        //     for (int j = 0; j < ac; j++) {
+        //         printf("The array is: %s\n", jobarry[j]);
+        //     }
+            
+        // }
+        
 
         /* Free the command line.
          * This will free the ast_pipeline objects still contained
@@ -323,5 +435,8 @@ main(int ac, char *av[])
          */
         ast_command_line_free(cline);
     }
+    
     return 0;
 }
+//work on exit first; work on ls, wc(posix_spawn) second (hold of on duping the pipes); expect user to only type on command at a type
+//access through the strut, ast_command_line 
