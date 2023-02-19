@@ -1,0 +1,55 @@
+BUILT IN COMMANDS
+    
+    jobs    
+    fg
+    bg 
+    kill
+    exit
+    stop
+
+    should use consecutively numbered small integers to enumerate jobs 
+
+    Commands implemented by the shell itself
+        1)  check if the input is one of the these commands
+
+
+NON BUILT IN COMMANDS
+
+    External commands that need to be forked and executed
+        1) Fork a new child process
+        2) execute the program in the context of a child
+
+        Background Job
+            if user appends a '&' to a command, the command is started and the shell will 
+            return back to the prompt
+        Foreground Job
+            shell will wait for a command to complete before reading the next command
+
+
+JOB CONTROL
+
+    user may interrupt foreground jobs
+    send foreground jobs into the background 
+
+    at a given moment
+        shell may run zero or more background jobs and zero or more foreground jobs
+
+    if foreground job
+        shell waits for ti complete before printing another prompt and reading
+
+    shell will inform the user about status changes of the jobs it manages
+        jobs may exit, terminate due to a signal, or be stopped for several reasons
+
+
+
+
+
+Handling SIGCHILD to Process Status changes
+
+    shell will receive a SIGCHILD to notify it on the status of a job asynchronously
+
+    need to catch SIGCHILD signal to learn when the shell's child processes change status
+
+    shell should not assume that a status change has occured until receives information from OS
+
+    
