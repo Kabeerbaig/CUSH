@@ -4,7 +4,7 @@ BUILT IN COMMANDS
     fg
     bg 
     kill
-    exit
+    -exit-
     stop
 
     should use consecutively numbered small integers to enumerate jobs 
@@ -52,4 +52,105 @@ Handling SIGCHILD to Process Status changes
 
     shell should not assume that a status change has occured until receives information from OS
 
+    need to block handling signals when we are accessing data structures that are also 
+        needed by the handler that is executed when this signal arrives
+
+        "block signals until a job has been added to the list completely"
+        "if signal is delivered during the blocking period, it will be marked as pending and will be
+            received as soon as the program unblocks the signal"
+
+    use signal_support.c to block and unblock signals
+        this relies on sigprocmask(2)
+
+    to set up signal handlers, they yse sigaction(2) system call with sa_flags set to SA_RESTART
+    mask of blocked signals is inherited when fork() is called
+        consequently, the child will need to unblock any signals the parents had blocked before calling exec()
+
+
+
+Process Groups
+
+    child processes that a user program may start should be part of the same job so that the 
+        user can manage them as one unit
+
+    shell must arrange process groups to be created and processes to be assigned to these groups
+
+    each process group has a dedsignated leader (one of the processes in the group)
+
+    process group id of a process group is the process id of the leader
+
+    to create a new group with itself as a leader, a process calls setpgid(0,0)
+
+    child processes inherit the process group of their parent process initially
+    they can then form their own group if desired
+    or parent process can place them inot a different process group via setpgid()
+
+    shell must create a new process group for each job and make sure that all processes
+    that will be created for this job will become members of this group
+
+
+Managing Terminal's State
+    when user switches between the shell's command line and foreground process jobs
+
+    need to restore the terminal state whenever a program manipulates its terminal state
+
+    (reccomended)
+    shell should save the state of the terminal when a job process is suspended 
+        and restore it when the job is continued in the foreground by the user
+
+    when shell returns to the prompt, must make itself the foreground process group of the terminal 
+    in this case, it should restore a known good terminal state 
+    shell should reference this state when it starts
+    use termstate_management.c 
+
+    shells sample the terminal state when a job has exited and replace their known good state
+        with the sampled state
+
+
     
+Pipes and I/O Redirection
+    pipeline of commands is considered one job
+
+
+    look at later
+
+
+
+Use of posix_spawn
+    combines fork() and exec() into one and can be customized so that the child process 
+        will perform necessary operations to set up or join a process group 
+        and to redirect inherited file descriptors as desired
+
+    posix spawnattr tcsetpgrp np(posix spawnattr t *attr, int fd)
+        allows you to provide a file descriptor referring to the terminal for which the
+        child process should acquire ownership
+
+    control flow: linear and traditional
+        called once and returned once
+        spawn a new program in a new process as a side effect
+
+    child process spawned will never directly access data structures
+        but relies on inheriting open file descriptors (like fork())
+
+    child process will run concurrently with parent process when it returns
+
+
+
+    posix_spawnp                        variant to find program's in the user's path
+    posix_spawn_file_actions_addup2     wire up file descriptors and handle redirection of standard error
+    posin_spawn_file_actions_addopen    wire up I/O redirection from / to files
+    posix_spawnattr_setpgroup 
+        with POSIX_SPAWN_SETPGROUP      flag to esablish or join a new process group
+    posix_spawnattr_tcsetpgrp_np
+        with POSIX_SPAWN_TCSETPGROUP    flag to give the child's process group terminal ownership
+    posix_spawnattr_setflags            to set the desired flags
+
+
+    do not need to use setpgid() call in the parent
+    call to spawn won't return until after the child has been placed into its process group
+
+    pass the current environment as the last argument
+        add an external declarartion lile: extern char **environ;
+
+    need to build the library first
+        cd posix_spawn; make
