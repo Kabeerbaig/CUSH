@@ -27,7 +27,7 @@
 #include "list.h"
 extern char **environ;
 static void handle_child_status(pid_t pid, int status);
-static void exeCommands(struct ast_pipeline *pipee);
+static void exePipelines(struct ast_pipeline *pipee);
 static void nonBuiltIn(struct ast_pipeline *pipee, struct ast_command *command);
 
 static void usage(char *progname)
@@ -457,13 +457,18 @@ int main(int ac, char *av[])
             continue;
         }
 
+        /*
+        =====================================================================================================
+        HANDLE COMMAND LINE HERE
+        =====================================================================================================
+        */
         signal_block(SIGCHLD);
         list_front(&cline->pipes);
         // loop through the command line and execute the different pipes
-        for (struct list_elem *e = list_begin(&cline->pipes); e != list_end(&cline->pipes); e = list_remove(e))
+        for (struct list_elem *e = list_begin(&cline->pipes); e != list_end(&cline->pipes); e = list_next(e))
         {
             struct ast_pipeline *pipee = list_entry(e, struct ast_pipeline, elem);
-            exeCommands(pipee);
+            exePipelines(pipee);
         }
         signal_unblock(SIGCHLD);
 
@@ -481,9 +486,10 @@ int main(int ac, char *av[])
     return 0;
 }
 
-static void exeCommands(struct ast_pipeline *pipee)
+static void exePipelines(struct ast_pipeline *pipee)
 {
-    // We loop through the pipeline to find the fist command and check to see if the command is a built in or requires posix spawn
+    // TODO: free ast_pipeline *pipee after a built in command is executed
+    //  We loop through the pipeline to find the fist command and check to see if the command is a built in or requires posix spawn
     for (struct list_elem *a = list_begin(&pipee->commands); a != list_end(&pipee->commands); a = list_next(a))
     {
         struct ast_command *command = list_entry(a, struct ast_command, elem);
@@ -579,14 +585,6 @@ static void exeCommands(struct ast_pipeline *pipee)
 static void nonBuiltIn(struct ast_pipeline *pipee, struct ast_command *command)
 {
     struct job *curJob = add_job(pipee);
-    if (curJob->pipe->bg_job == true)
-    {
-        curJob->status = BACKGROUND;
-    }
-    else
-    {
-        curJob->status = FOREGROUND;
-    }
 
     posix_spawn_file_actions_t child_file_attr;
     posix_spawnattr_t child_spawn_attr;
@@ -605,39 +603,37 @@ static void nonBuiltIn(struct ast_pipeline *pipee, struct ast_command *command)
     posix_spawnattr_setpgroup(&child_spawn_attr, 0);
     posix_spawnattr_setflags(&child_spawn_attr, POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_USEVFORK);
 
-    // need to incremrment when process is sucessfull
-    pid_t pid;
-    if (posix_spawnp(&pid, command->argv[0], &child_file_attr, &child_spawn_attr, command->argv, environ) == 0)
+    // set up for foreground process
+    if (!pipee->bg_job)
     {
-        // printf("Here is the child pid: %d", (int)pid);
-        if (curJob->status == BACKGROUND)
-        {
-            printf("BG job detected\n");
-        }
-        else if (curJob->status == FOREGROUND)
-        {
-            printf("FG job detected\n");
-            posix_spawnattr_tcsetpgrp_np(&child_spawn_attr, termstate_get_tty_fd());
-
-            posix_spawnattr_setflags(&child_spawn_attr, POSIX_SPAWN_SETPGROUP);
-            signal_block(SIGCHLD);
-            wait_for_job(curJob);
-            signal_unblock(SIGCHLD);
-            if (posix_spawnattr_setflags(&child_spawn_attr, POSIX_SPAWN_SETPGROUP))
-            {
-                utils_fatal_error(
-                    "POSIX_SPAWN_TCSETPGROUP flag could not be set\n");
-            }
-            termstate_give_terminal_back_to_shell();
-        }
-        else
-        {
-            printf("ERROR!! within spawn status");
-        }
+        posix_spawnattr_tcsetpgrp_np(&child_spawn_attr, termstate_get_tty_fd());
+        posix_spawnattr_setflags(&child_spawn_attr, POSIX_SPAWN_SETPGROUP);
+        curJob->status = FOREGROUND;
     }
-    // pid == 18975;
     else
     {
-        printf("ERROR!! Error with posix_spawn");
+        curJob->status = BACKGROUND;
+    }
+
+    // spawn fg process
+    curJob->PIDList = createPIDs(list_size(&pipee->commands));
+    pid_t gpid;
+    if (posix_spawnp(&gpid, command->argv[0], &child_file_attr, &child_spawn_attr, command->argv, environ) == 0)
+    {
+    }
+    else
+    {
+    }
+
+    addPID(curJob->PIDList, gpid);
+    curJob->pgid = gpid;
+    curJob->num_processes_alive++;
+
+    posix_spawnattr_destroy(&child_spawn_attr);
+    posix_spawn_file_actions_destroy(&child_file_attr);
+
+    if (!pipee->bg_job)
+    {
+        wait_for_job(curJob);
     }
 }
