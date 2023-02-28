@@ -13,6 +13,8 @@
 #include <termios.h>
 #include <sys/wait.h>
 #include <assert.h>
+#include <errno.h>
+#include <fcntl.h>
 
 /* Since the handed out code contains a number of unused functions. */
 #pragma GCC diagnostic ignored "-Wunused-function"
@@ -21,7 +23,9 @@
 #include "signal_support.h"
 #include "shell-ast.h"
 #include "utils.h"
-
+#include "spawn.h"
+#include "list.h"
+extern char **environ;
 static void handle_child_status(pid_t pid, int status);
 
 static void
@@ -54,12 +58,14 @@ struct job {
     struct list_elem elem;   /* Link element for jobs list. */
     struct ast_pipeline *pipe;  /* The pipeline of commands this job represents */
     int     jid;             /* Job id. */
+    pid_t pgid;              /* this is the process group id*/
     enum job_status status;  /* Job status. */ 
     int  num_processes_alive;   /* The number of processes that we know to be alive */
     struct termios saved_tty_state;  /* The state of the terminal when this job was 
                                         stopped after having been in foreground */
 
     /* Add additional fields here if needed. */
+    struct list pid;
 };
 
 /* Utility functions for job list management.
@@ -78,7 +84,6 @@ get_job_from_jid(int jid)
 {
     if (jid > 0 && jid < MAXJOBS && jid2job[jid] != NULL)
         return jid2job[jid];
-
     return NULL;
 }
 
@@ -253,7 +258,9 @@ handle_child_status(pid_t pid, int status)
      *         If a process was stopped, save the terminal state.
      */
 
-     struct job* newJobStructure = get_job_from_jid(pid);
+    //  struct job* newJobStructure = get_job_from_jid(pid);
+    for (struct list_elem* var = list_begin(&job_list); var != list_end(&job_list); var = list_next(var)) {
+     struct job* newJobStructure = list_entry(var, struct job, elem);
    
 // Checks to see if process was stopped by a signal
     if (WIFSTOPPED(status)) {
@@ -318,7 +325,7 @@ handle_child_status(pid_t pid, int status)
 
     //     }
     // }
-
+    }
 
 }
 
@@ -389,6 +396,14 @@ main(int ac, char *av[])
         {
              struct ast_pipeline *pipee = list_entry (e, struct ast_pipeline, elem);
              struct list_elem *a;
+             //add job here
+            struct job* curJob = add_job(pipee);
+            if (curJob->pipe->bg_job == true) {
+                curJob->status = BACKGROUND;
+            }else {
+                curJob->status = FOREGROUND;
+
+            }
             for (a = list_begin (&pipee->commands); a != list_end (&pipee->commands); a = list_next (a)) {
             struct ast_command *command = list_entry(a,  struct ast_command, elem);
             
@@ -396,8 +411,160 @@ main(int ac, char *av[])
                 if (strcmp(command->argv[0], "exit") == 0) {
                     exit(0);
                 }
+                else if (strcmp(command->argv[0], "jobs") == 0) {
+                    pid_t id;
+                    int stat;
 
-            }
+                    while ((id = waitpid(-1, &stat, WNOHANG)) > 0) {
+
+                        if (WIFSIGNALED(stat)) {
+                            printf("This was the cause: %d\n", WTERMSIG(stat));
+                        }
+                        else if (WIFEXITED(stat)) {
+                            printf("This was the cause: %d\n",WEXITSTATUS(stat));
+                        }
+                        else if (WIFSTOPPED(stat)) {
+                            printf("This was the cause: %d\n", WSTOPSIG(stat));
+                        }
+                        else {
+                            printf("No errors");
+                        }
+                    }
+                
+                }
+                else if (strcmp(command->argv[0], "bg") == 0) {
+                    //SIGCONT singal will bring the process back to the foreground, bringing it back to a running state??
+                    // Crtl + Z will give a SIGTSTP singal to stop the process
+                    // Are we suppose to use the kill command in this function? 
+                    // running in background and stop is not runnning at all
+                    // changing the status of the job and continuing but in stop you would send the stop signal 
+
+                }
+                else if (strcmp(command->argv[0], "fg") == 0) {
+                    // Do I have to make a new job struct here?
+                    // need to recover the job structure 
+                    pid_t id = atoi(command->argv[1]);
+                    // receive in a struct variable 
+                    // if (id == NULL) {
+                    // printf("Error with the id passed in.");
+                    // }
+                    if (jid2job[id] == NULL) {
+                        printf("JOB DOESNT EXIT\n");
+                    }
+                    else {
+                         struct job* sjob = jid2job[id];
+                    // need to access the saved tty state to get terimal 
+                    // NEed a couple of check before running this, flag syntax 
+                   // pid_t pid = sjob->jid;
+                    //pid_t pgid = getpgid(pid);
+                    if (sjob == NULL) {
+                        printf("Error error");
+                    } 
+                    else{
+                        sjob->status = FOREGROUND;
+                    
+                        
+                    termstate_give_terminal_to(&sjob->saved_tty_state, sjob->pgid);
+
+                    }
+                   wait_for_job(sjob);
+                    }
+                     
+                }
+                // else if () {
+
+                // }
+                // else if () {
+
+                // }
+ 
+                else {
+                   posix_spawn_file_actions_t child_file_attr;
+                   posix_spawnattr_t child_spawn_attr;
+                   //posix_spawnattr_init(&child_file_attr);
+                    posix_spawnattr_init(&child_spawn_attr);
+                   posix_spawn_file_actions_init(&child_file_attr);
+                    //posix_spawnattr_setflags // flags will defer depending on if the job is foreground or background
+                    // if its a foreground setpgroup and tcsetgroup
+                    //posix_spawnattr_tc
+
+                    //posix spawnattr tcsetpgrp np; use this to give child terminal access 
+                    // takes two different agrumetnts, child and file descriptor look for termstat state tty ft only for foreground
+    
+                    posix_spawnattr_setpgroup(&child_spawn_attr, 0); // not sure if I did this right
+                    posix_spawnattr_setflags(&child_spawn_attr, POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_USEVFORK);
+                   // need to incremrment when process is sucessfull
+                    pid_t pid; // 0
+                    if (posix_spawnp(&pid, command->argv[0],&child_file_attr, &child_spawn_attr, command->argv, environ ) == 0) {
+                        //printf("Here is the child pid: %d", (int)pid);
+                          if (curJob->status == BACKGROUND) {
+                        printf("BG job detected\n");
+                    }
+                    else if (curJob->status == FOREGROUND){
+                         printf("FG job detected\n");
+                         posix_spawnattr_tcsetpgrp_np(&child_spawn_attr, termstate_get_tty_fd());
+                         
+                        posix_spawnattr_setflags(&child_spawn_attr, POSIX_SPAWN_SETPGROUP);
+                        signal_block(SIGCHLD);
+                        wait_for_job(curJob);
+                        signal_unblock(SIGCHLD);
+                        posix_spawnattr_setflags(&child_spawn_attr, POSIX_SPAWN_SETPGROUP); //|
+                                                //POSIX_SPAWN_TCSETPGROUP);
+        }
+                        // termstate_give_terminal_back_to_shell();
+                    }
+                    else {
+                        printf("ERROR!! within spawn status");
+                    }
+                    }
+                    // pid == 18975;
+                   
+
+
+                    //  printf("Group id: %d", gpid);
+                    // int pipefd[2];
+                    // pipefd[0]; //is the read end of the file
+                    // pipefd[1]; //is the write end of the file
+                    // if (pipe(pipefd) == -1) {
+                    //     perror("Error with the pipe!");
+                    //     exit(EXIT_FAILURE);
+                    // }
+
+                    // posix_spawn_file_actions_addclose();
+                    // posix_spawn_file_actions_adddup2();
+                   // printf("Here is the pid: %d\n", pid);
+                    // struct job* pjob = get_job_from_jid(pid);
+                    
+                  
+
+                    //handle child next
+                    // if (pjob == NULL) {
+                    //     printf("Erroe");
+                    // }
+                    // else {
+                    //     printf("You did it right!");
+                    // }
+                
+                   // wait_for_job(pjob);
+                    
+                    
+                    // need to add to job list 
+                    //wait for job at some point
+                   
+                    
+                    // wiritng up  multiple pipe
+
+                // if (pid == 0) {
+
+                // }
+                // need to store the status if it is 0
+                // if it is a bg process you would give terminal back to process 
+                // fg wait_for_job will wait for that specific job to be completed
+                // need to set pgroup value, depends on pip
+                // need to give it terminal access...
+                }
+            } 
+            
           
 
         }
@@ -411,18 +578,6 @@ main(int ac, char *av[])
         //first command redirect standard out when it is a regular command
        // ast_command_line_print(cline);      /* Output a representation of
                                                //the entered command line */
-       // printf("The command is: %s\n", );
-        // char* jobarry[5];
-        // for (int i = 0; i < ac; i++) {
-        //     jobarry[i] = av[i];
-        // }
-
-        // if (strcmp(av[1], "jobs") == 0) {
-        //     for (int j = 0; j < ac; j++) {
-        //         printf("The array is: %s\n", jobarry[j]);
-        //     }
-            
-        // }
         
 
         /* Free the command line.
@@ -438,5 +593,64 @@ main(int ac, char *av[])
     
     return 0;
 }
+// static struct job *  get_job_from_pid(pid_t pid) {
+//     struct list_elem *i;
+    
+    
+//     for (i = list_begin(&job_list); i != list_end(&job_list); i = list_next(i)) {
+//        // jid2job[MAXJOBS]->pipe;
+
+//         struct list_elem *e;
+
+//         for (e = list_begin(&jid2job[MAXJOBS]); i != list_end(&jid2job[MAXJOBS]); i = list_next(e)) {
+                
+
+//         }
+
+//     }
+// }
+
+// for (e = list_begin (&cline->pipes); e != list_end (&cline->pipes); e = list_next (e))
+//         {
+            //  struct ast_pipeline *pipee = list_entry (e, struct ast_pipeline, elem);
+            //  struct list_elem *a;
+            //  //add job here
+            // struct job* curJob = add_job(pipee);
+            // if (curJob->pipe->bg_job == true) {
+            //     curJob->status = BACKGROUND;
+            // }else {
+            //     curJob->status = FOREGROUND;
+
+            // }
+            // for (a = list_begin (&pipee->commands); a != list_end (&pipee->commands); a = list_next (a)) {
+            // struct ast_command *command = list_entry(a,  struct ast_command, elem);
+            
+
+        // need to loop through job list
+        // then need to loop jid2job 
+        // Need to compare and see if pid passed in equals to job2jobs
+        // then update the list in jobs 
+        // return the jobs struct 
+    
+
 //work on exit first; work on ls, wc(posix_spawn) second (hold of on duping the pipes); expect user to only type on command at a type
 //access through the strut, ast_command_line 
+
+// void kill (pid_t pid, int sig) {
+// do I have to create a new job struct?
+// if (pid > 0) {
+//    // signal(SIGTERM, );
+
+// }
+// else if (pid == 0) {
+
+// }
+// else if (pid < -1) {
+
+// }
+// else {
+    
+// }
+
+
+// }
