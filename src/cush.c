@@ -27,6 +27,7 @@
 #include "list.h"
 extern char **environ;
 static void handle_child_status(pid_t pid, int status);
+static void nonBuiltIn(struct ast_pipeline *pipee, struct ast_command *command);
 
 static void usage(char *progname)
 {
@@ -465,16 +466,16 @@ int main(int ac, char *av[])
         {
             struct ast_pipeline *pipee = list_entry(e, struct ast_pipeline, elem);
             struct list_elem *a;
-            // add job here
-            struct job *curJob = add_job(pipee);
-            if (curJob->pipe->bg_job == true)
-            {
-                curJob->status = BACKGROUND;
-            }
-            else
-            {
-                curJob->status = FOREGROUND;
-            }
+            // // add job here
+            // struct job *curJob = add_job(pipee);
+            // if (curJob->pipe->bg_job == true)
+            // {
+            //     curJob->status = BACKGROUND;
+            // }
+            // else
+            // {
+            //     curJob->status = FOREGROUND;
+            // }
             for (a = list_begin(&pipee->commands); a != list_end(&pipee->commands); a = list_next(a))
             {
                 struct ast_command *command = list_entry(a, struct ast_command, elem);
@@ -559,55 +560,7 @@ int main(int ac, char *av[])
 
                 else
                 {
-                    posix_spawn_file_actions_t child_file_attr;
-                    posix_spawnattr_t child_spawn_attr;
-                    // posix_spawnattr_init(&child_file_attr);
-                    posix_spawnattr_init(&child_spawn_attr);
-                    posix_spawn_file_actions_init(&child_file_attr);
-                    // posix_spawnattr_setflags // flags will defer depending on if the job is foreground or background
-                    //  if its a foreground setpgroup and tcsetgroup
-                    // posix_spawnattr_tc
-
-                    // posix spawnattr tcsetpgrp np; use this to give child terminal access
-                    //  takes two different agrumetnts, child and file descriptor look for termstat state tty ft only for foreground
-
-                    posix_spawnattr_setpgroup(&child_spawn_attr, 0); // not sure if I did this right
-                    posix_spawnattr_setflags(&child_spawn_attr, POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_USEVFORK);
-                    // need to incremrment when process is sucessfull
-                    pid_t pid; // 0
-                    if (posix_spawnp(&pid, command->argv[0], &child_file_attr, &child_spawn_attr, command->argv, environ) == 0)
-                    {
-                        // printf("Here is the child pid: %d", (int)pid);
-                        if (curJob->status == BACKGROUND)
-                        {
-                            printf("BG job detected\n");
-                        }
-                        else if (curJob->status == FOREGROUND)
-                        {
-                            printf("FG job detected\n");
-                            posix_spawnattr_tcsetpgrp_np(&child_spawn_attr, termstate_get_tty_fd());
-
-                            posix_spawnattr_setflags(&child_spawn_attr, POSIX_SPAWN_SETPGROUP);
-                            signal_block(SIGCHLD);
-                            wait_for_job(curJob);
-                            signal_unblock(SIGCHLD);
-                            if (posix_spawnattr_setflags(&child_spawn_attr, POSIX_SPAWN_SETPGROUP))
-                            {
-                                utils_fatal_error(
-                                    "POSIX_SPAWN_TCSETPGROUP flag could not be set\n");
-                            }
-                            termstate_give_terminal_back_to_shell();
-                        }
-                        else
-                        {
-                            printf("ERROR!! within spawn status");
-                        }
-                    }
-                    // pid == 18975;
-                    else
-                    {
-                        printf("ERROR!! Error with posix_spawn");
-                    }
+                    nonBuiltIn(pipee, command);
                 }
             }
         }
@@ -634,4 +587,63 @@ int main(int ac, char *av[])
     }
 
     return 0;
+}
+
+/**
+ * Handles non built in commands given to the command line
+ */
+static void nonBuiltIn(struct ast_pipeline *pipee, struct ast_command *command)
+{
+
+    struct job *curJob = add_job(pipee);
+
+    posix_spawn_file_actions_t child_file_attr;
+    posix_spawnattr_t child_spawn_attr;
+    // posix_spawnattr_init(&child_file_attr);
+    posix_spawnattr_init(&child_spawn_attr);
+    posix_spawn_file_actions_init(&child_file_attr);
+    // posix_spawnattr_setflags // flags will defer depending on if the job is foreground or background
+    //  if its a foreground setpgroup and tcsetgroup
+    // posix_spawnattr_tc
+
+    // posix spawnattr tcsetpgrp np; use this to give child terminal access
+    //  takes two different agrumetnts, child and file descriptor look for termstat state tty ft only for foreground
+
+    posix_spawnattr_setpgroup(&child_spawn_attr, 0); // not sure if I did this right
+    posix_spawnattr_setflags(&child_spawn_attr, POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_USEVFORK);
+    // need to incremrment when process is sucessfull
+    pid_t pid; // 0
+    if (posix_spawnp(&pid, command->argv[0], &child_file_attr, &child_spawn_attr, command->argv, environ) == 0)
+    {
+        // printf("Here is the child pid: %d", (int)pid);
+        if (curJob->status == BACKGROUND)
+        {
+            printf("BG job detected\n");
+        }
+        else if (curJob->status == FOREGROUND)
+        {
+            printf("FG job detected\n");
+            posix_spawnattr_tcsetpgrp_np(&child_spawn_attr, termstate_get_tty_fd());
+
+            posix_spawnattr_setflags(&child_spawn_attr, POSIX_SPAWN_SETPGROUP);
+            signal_block(SIGCHLD);
+            wait_for_job(curJob);
+            signal_unblock(SIGCHLD);
+            if (posix_spawnattr_setflags(&child_spawn_attr, POSIX_SPAWN_SETPGROUP))
+            {
+                utils_fatal_error(
+                    "POSIX_SPAWN_TCSETPGROUP flag could not be set\n");
+            }
+            termstate_give_terminal_back_to_shell();
+        }
+        else
+        {
+            printf("ERROR!! within spawn status");
+        }
+    }
+    // pid == 18975;
+    else
+    {
+        printf("ERROR!! Error with posix_spawn");
+    }
 }
