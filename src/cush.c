@@ -66,7 +66,7 @@ struct job
                                        stopped after having been in foreground */
 
     /* Add additional fields here if needed. */
-    struct PIDs *pPIDs; // list of PIDs that a job has
+    struct PIDs *PIDList; // list of PIDs that a job has
 };
 
 /**
@@ -173,6 +173,7 @@ static void delete_job(struct job *job)
     jid2job[jid]->jid = -1;
     jid2job[jid] = NULL;
     ast_pipeline_free(job->pipe);
+    cleanPID(job->PIDList);
     free(job);
 }
 
