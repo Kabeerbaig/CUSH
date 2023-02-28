@@ -508,8 +508,9 @@ main(int ac, char *av[])
                         signal_block(SIGCHLD);
                         wait_for_job(curJob);
                         signal_unblock(SIGCHLD);
-                        posix_spawnattr_setflags(&child_spawn_attr, POSIX_SPAWN_SETPGROUP); //|
-                                                //POSIX_SPAWN_TCSETPGROUP);
+                        if (posix_spawnattr_setflags(&child_spawn_attr, POSIX_SPAWN_SETPGROUP)) {
+            utils_fatal_error(
+                "POSIX_SPAWN_TCSETPGROUP flag could not be set\n");
         }
                         // termstate_give_terminal_back_to_shell();
                     }
@@ -518,7 +519,9 @@ main(int ac, char *av[])
                     }
                     }
                     // pid == 18975;
-                   
+                    else {
+                        printf("ERROR!! Error with posix_spawn");
+                    }
 
 
                     //  printf("Group id: %d", gpid);
