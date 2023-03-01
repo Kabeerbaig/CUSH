@@ -589,8 +589,8 @@ static void nonBuiltIn(struct ast_pipeline *pipee, struct ast_command *command)
     posix_spawn_file_actions_t child_file_attr;
     posix_spawnattr_t child_spawn_attr;
 
-    posix_spawnattr_init(&child_spawn_attr);
     posix_spawn_file_actions_init(&child_file_attr);
+    posix_spawnattr_init(&child_spawn_attr);
 
     // posix_spawnattr_setflags // flags will defer depending on if the job is foreground or background
     //  if its a foreground setpgroup and tcsetgroup
@@ -600,6 +600,7 @@ static void nonBuiltIn(struct ast_pipeline *pipee, struct ast_command *command)
     //  takes two different agrumetnts, child and file descriptor look for termstat state tty ft only for foreground
 
     // new process sets gpid as its own pid
+    pid_t gpid;
     posix_spawnattr_setpgroup(&child_spawn_attr, 0);
     posix_spawnattr_setflags(&child_spawn_attr, POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_USEVFORK);
 
@@ -615,25 +616,123 @@ static void nonBuiltIn(struct ast_pipeline *pipee, struct ast_command *command)
         curJob->status = BACKGROUND;
     }
 
-    // spawn fg process
-    curJob->PIDList = createPIDs(list_size(&pipee->commands));
-    pid_t gpid;
+    // set up pipes
+    // get the number of pipes
+    int numPipes = list_size(&pipee->commands) - 1;
+    curJob->PIDList = createPIDs(numPipes);
+
+    // create an array for the pipes
+    int *pipeArray = NULL;
+    int index = 0;
+    // if needed to pipe, wire stdin and stdout
+    if (numPipes != 0)
+    {
+        pipeArray = calloc((numPipes)*2, sizeof(int));
+
+        pipe2(&pipeArray[0], O_CLOEXEC);
+
+        posix_spawn_file_actions_adddup2(&child_file_attr, pipeArray[1], fileno(stdout));
+        if (command->dup_stderr_to_stdout)
+        {
+            posix_spawn_file_actions_adddup2(&child_file_attr, pipeArray[1], fileno(stderr));
+        }
+
+        index++;
+    }
+
+    // create the first process, this is considered the gpid
+    // if successful, update job
     if (posix_spawnp(&gpid, command->argv[0], &child_file_attr, &child_spawn_attr, command->argv, environ) == 0)
     {
-    }
-    else
-    {
+        addPID(curJob->PIDList, gpid);
+        curJob->pgid = gpid;
+        curJob->num_processes_alive++;
     }
 
-    addPID(curJob->PIDList, gpid);
-    curJob->pgid = gpid;
-    curJob->num_processes_alive++;
-
-    posix_spawnattr_destroy(&child_spawn_attr);
+    // clean the parent process attr and file
     posix_spawn_file_actions_destroy(&child_file_attr);
+    posix_spawnattr_destroy(&child_spawn_attr);
 
+    // create other processes
+    struct list_elem *pipeCommand = list_begin(&pipee->commands);
+    pipeCommand = list_next(pipeCommand);
+
+    struct list_elem *end = list_back(&pipee->commands);
+    struct ast_command *endCommand = list_entry(end, struct ast_command, elem);
+
+    // loop to go through other commands
+    while (command != endCommand)
+    {
+        // get the command and get next
+        command = list_entry(pipeCommand, struct ast_command, elem);
+        pipeCommand = list_next(pipeCommand);
+
+        // set up for spawning new process
+        pid_t spawnPID;
+        posix_spawn_file_actions_t child_file_attr;
+        posix_spawnattr_t child_spawn_attr;
+
+        // set gpid
+        posix_spawnattr_setpgroup(&child_spawn_attr, gpid);
+        posix_spawnattr_setflags(&child_spawn_attr, POSIX_SPAWN_SETPGROUP);
+
+        posix_spawn_file_actions_init(&child_file_attr);
+        posix_spawnattr_init(&child_spawn_attr);
+
+        // get where the pipes input and output are going to be in the pipe array
+        int input = (index - 1) * 2;
+        int output = (index * 2) + 1;
+
+        // wire process inputs
+        posix_spawn_file_actions_adddup2(&child_file_attr, pipeArray[input], fileno(stdin));
+
+        // if not the last command, then need to wire to other pipe
+        if (command != endCommand)
+        {
+            // printf("Current pipes input: %d, output: %d being wired to: %d\n", input, output, (index * 2));
+            pipe2(&pipeArray[index * 2], O_CLOEXEC);
+            posix_spawn_file_actions_adddup2(&child_file_attr, pipeArray[output], fileno(stdout));
+            if (command->dup_stderr_to_stdout)
+            {
+                posix_spawn_file_actions_adddup2(&child_file_attr, pipeArray[output], fileno(stderr));
+            }
+            index++;
+        }
+
+        // if spawn successful, update job
+        if (posix_spawnp(&spawnPID, command->argv[0], &child_file_attr, &child_spawn_attr, command->argv, environ) == 0)
+        {
+            curJob->num_processes_alive++;
+            addPID(curJob->PIDList, spawnPID);
+        }
+
+        // clean the process attr and file
+        posix_spawnattr_destroy(&child_spawn_attr);
+        posix_spawn_file_actions_destroy(&child_file_attr);
+
+        // close pipes after use
+        close(pipeArray[input]);
+        if (command != endCommand)
+        {
+            close(pipeArray[output]);
+        }
+    }
+
+    // close the parent process pipes
+    if (pipeArray != NULL)
+    {
+        close(pipeArray[1]);
+    }
+
+    // wait for the job to finish
     if (!pipee->bg_job)
     {
         wait_for_job(curJob);
+    }
+
+    // clean the pipe array after use
+    if (pipeArray)
+    {
+        free(pipeArray);
     }
 }
