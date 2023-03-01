@@ -492,36 +492,35 @@ main(int ac, char *av[])
                     // takes two different agrumetnts, child and file descriptor look for termstat state tty ft only for foreground
     
                     posix_spawnattr_setpgroup(&child_spawn_attr, 0); // not sure if I did this right
-                    posix_spawnattr_setflags(&child_spawn_attr, POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_USEVFORK);
+                    posix_spawnattr_setflags(&child_spawn_attr, POSIX_SPAWN_SETPGROUP);
                    // need to incremrment when process is sucessfull
-                    pid_t pid; // 0
-                    if (posix_spawnp(&pid, command->argv[0],&child_file_attr, &child_spawn_attr, command->argv, environ ) == 0) {
-                        //printf("Here is the child pid: %d", (int)pid);
-                          if (curJob->status == BACKGROUND) {
+                       if (curJob->status == BACKGROUND) {
                         printf("BG job detected\n");
                     }
                     else if (curJob->status == FOREGROUND){
                          printf("FG job detected\n");
                          posix_spawnattr_tcsetpgrp_np(&child_spawn_attr, termstate_get_tty_fd());
                          
-                        posix_spawnattr_setflags(&child_spawn_attr, POSIX_SPAWN_SETPGROUP);
+                        posix_spawnattr_setflags(&child_spawn_attr, POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_TCSETPGROUP);
                         signal_block(SIGCHLD);
                         wait_for_job(curJob);
                         signal_unblock(SIGCHLD);
-                        if (posix_spawnattr_setflags(&child_spawn_attr, POSIX_SPAWN_SETPGROUP)) {
-            utils_fatal_error(
-                "POSIX_SPAWN_TCSETPGROUP flag could not be set\n");
-        }
-                        // termstate_give_terminal_back_to_shell();
+                        
+                       // posix_spawnattr_setflags(&child_spawn_attr,POSIX SPAWN TCSETPGROUP);
+                        // 
+                        
+                        
                     }
                     else {
                         printf("ERROR!! within spawn status");
                     }
-                    }
+                    
+                    pid_t pid; // 0
+                    posix_spawnp(&pid, command->argv[0],&child_file_attr, &child_spawn_attr, command->argv, environ );
+                    
+                        //printf("Here is the child pid: %d", (int)pid);
                     // pid == 18975;
-                    else {
-                        printf("ERROR!! Error with posix_spawn");
-                    }
+                   
 
 
                     //  printf("Group id: %d", gpid);
