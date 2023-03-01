@@ -54,6 +54,7 @@ enum job_status
     STOPPED,       /* job is stopped via SIGSTOP */
     NEEDSTERMINAL, /* job is stopped because it was a background job
                       and requires exclusive terminal access */
+    DONE,          /* job is exited normally*/
 };
 
 struct job
@@ -191,6 +192,8 @@ static const char *get_status(enum job_status status)
         return "Stopped";
     case NEEDSTERMINAL:
         return "Stopped (tty)";
+    case DONE:
+        return "Done";
     default:
         return "Unknown";
     }
@@ -368,24 +371,6 @@ handle_child_status(pid_t pid, int status)
         {
             printf("Unknown child stats\n");
         }
-        // Checks to see if the process was terminated by signal
-        // else if (WIFSIGNALED(status)) {
-        //     if (WTERMSIG(status) == SIGINT) {
-        //         newJobStructure->status = FOREGROUND;
-        //         termstate_save(newJobStructure);
-        //         newJobStructure->num_processes_alive--;
-        //           termstate_give_terminal_back_to_shell();
-        //     }
-        //     else if (WTERMSIG(status) ==SIGTERM) {
-
-        //     }
-        //     else if (WTERMSIG(status) == SIGKILL) {
-
-        //     }
-        //     else {
-
-        //     }
-        // }
     }
 }
 
@@ -581,7 +566,7 @@ static void nonBuiltIn(struct ast_pipeline *pipee, struct ast_command *command)
     if (!pipee->bg_job)
     {
         posix_spawnattr_tcsetpgrp_np(&child_spawn_attr, termstate_get_tty_fd());
-        posix_spawnattr_setflags(&child_spawn_attr, POSIX_SPAWN_SETPGROUP);
+        posix_spawnattr_setflags(&child_spawn_attr, POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_TCSETPGROUP);
         curJob->status = FOREGROUND;
     }
     else
@@ -701,6 +686,11 @@ static void nonBuiltIn(struct ast_pipeline *pipee, struct ast_command *command)
     if (!pipee->bg_job)
     {
         wait_for_job(curJob);
+        termstate_give_terminal_back_to_shell();
+    }
+    else
+    {
+        printf("[%d] %d\n", curJob->jid, curJob->pgid);
     }
 
     // clean the pipe array after use
