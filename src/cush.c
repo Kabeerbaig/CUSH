@@ -69,7 +69,7 @@ struct job
                                        stopped after having been in foreground */
 
     /* Add additional fields here if needed. */
-    struct PIDs *PIDList; // list of PIDs that a job has
+    struct PIDs *PIDList; // list of PIDs that a job has // when the jobs are created add the pids 
 };
 
 /**
@@ -322,50 +322,53 @@ handle_child_status(pid_t pid, int status)
     {
         struct job *newJobStructure = list_entry(var, struct job, elem);
 
+        // if (!findPID(newJobStructure->PIDList, pid)) continue;
+
         // Checks to see if process was stopped by a signal
         if (WIFSTOPPED(status))
         {
 
-            if (WSTOPSIG(status) == SIGTSTP || WSTOPSIG(status) == SIGSTOP)
-            {
-                newJobStructure->status = STOPPED;
-                // newJobStructure->num_processes_alive--;
-                //  termstate_save(newJobStructure);
-                //   termstate_give_terminal_back_to_shell();
-            }
-            else if (WSTOPSIG(status) == SIGTTOU || WSTOPSIG(status) == SIGTTIN)
+             if (WSTOPSIG(status) == SIGTTOU || WSTOPSIG(status) == SIGTTIN)
             {
                 newJobStructure->status = NEEDSTERMINAL;
             }
+            else {
+                newJobStructure->status = STOPPED;
+            }
             termstate_save(&newJobStructure->saved_tty_state);
+            
         }
         // Checks to see if the process is terminated normally
         // Process is dead here
         else if (WIFEXITED(status) || WIFSIGNALED(status))
         {
             newJobStructure->num_processes_alive--;
-            if (newJobStructure->status == FOREGROUND)
-            {
-                termstate_sample();
+            if (newJobStructure->num_processes_alive == 0) {
+                if (newJobStructure->status == BACKGROUND) {
+                    newJobStructure->status = DONE;
+                }
+            
+            termstate_sample();
+             
             }
-            int term_sig = WTERMSIG(status);
-            if (term_sig == SIGKILL || term_sig == SIGTERM)
-            {
-                if (newJobStructure->status == FOREGROUND)
-                    printf("Killed\n");
-            }
-            else if (term_sig == SIGFPE && newJobStructure->status == FOREGROUND)
-            {
-                printf("Floating Point exception\n");
-            }
-            else if (term_sig == SIGSEGV && newJobStructure->status == FOREGROUND)
-            {
-                printf("Segmentation Fault\n");
-            }
-            else if (term_sig == SIGABRT && newJobStructure->status == FOREGROUND)
-            {
-                printf("Aborted\n");
-            }
+            //int term_sig = WTERMSIG(status);
+            // if (term_sig == SIGKILL || term_sig == SIGTERM)
+            // {
+            //     if (newJobStructure->status == FOREGROUND)
+            //         printf("Killed\n");
+            // }
+            // else if (term_sig == SIGFPE && newJobStructure->status == FOREGROUND)
+            // {
+            //     printf("Floating Point exception\n");
+            // }
+            // else if (term_sig == SIGSEGV && newJobStructure->status == FOREGROUND)
+            // {
+            //     printf("Segmentation Fault\n");
+            // }
+            // else if (term_sig == SIGABRT && newJobStructure->status == FOREGROUND)
+            // {
+            //     printf("Aborted\n");
+            // }
         }
         else
         {
@@ -529,7 +532,7 @@ static void exePipelines(struct ast_pipeline *pipee)
             // Do I have to make a new job struct here?
             // need to recover the job structure
             if (command->argv[1] == NULL) {
-                printf("Job id missing!!");
+                printf("Job id missing in FG!!");
             }
             pid_t id = atoi(command->argv[1]);
             // receive in a struct variable
@@ -548,7 +551,7 @@ static void exePipelines(struct ast_pipeline *pipee)
                 // pid_t pgid = getpgid(pid);
                 if (sjob == NULL)
                 {
-                    printf("Error error");
+                    printf("Error error job is NUll in FG");
                 }
                 if (id == sjob->jid) {
                     sjob->status = FOREGROUND;
@@ -559,7 +562,7 @@ static void exePipelines(struct ast_pipeline *pipee)
                     }
                 }
                 wait_for_job(sjob);
-            
+            termstate_give_terminal_back_to_shell();
         }
         else if (strcmp(command->argv[0], "kill") == 0) {
             if (command->argv[1] == NULL) {
