@@ -315,7 +315,6 @@ handle_child_status(pid_t pid, int status)
      *         If a process was stopped, save the terminal state.
      */
 
-    //  struct job* newJobStructure = get_job_from_jid(pid);
     for (struct list_elem *var = list_begin(&job_list); var != list_end(&job_list); var = list_next(var))
     {
         struct job *newJobStructure = list_entry(var, struct job, elem);
@@ -331,22 +330,14 @@ handle_child_status(pid_t pid, int status)
                 //  termstate_save(newJobStructure);
                 //   termstate_give_terminal_back_to_shell();
             }
-            // else if () {
-            //     newJobStructure->status = STOPPED;
-            //     newJobStructure->num_processes_alive--;
-            //      termstate_save(newJobStructure);
-            //       termstate_give_terminal_back_to_shell();
-
-            // }
             else if (WSTOPSIG(status) == SIGTTOU || WSTOPSIG(status) == SIGTTIN)
             {
                 newJobStructure->status = NEEDSTERMINAL;
-
-                //   termstate_give_terminal_back_to_shell();
             }
             termstate_save(&newJobStructure->saved_tty_state);
         }
         // Checks to see if the process is terminated normally
+        // Process is dead here
         else if (WIFEXITED(status) || WIFSIGNALED(status))
         {
             newJobStructure->num_processes_alive--;
@@ -480,7 +471,7 @@ int main(int ac, char *av[])
          * manage the lifetime of the associated ast_pipelines.
          * Otherwise, freeing here will cause use-after-free errors.
          */
-        ast_command_line_free(cline);
+        free(cline);
     }
 
     return 0;
@@ -500,28 +491,10 @@ static void exePipelines(struct ast_pipeline *pipee)
         }
         else if (strcmp(command->argv[0], "jobs") == 0)
         {
-            pid_t id;
-            int stat;
-
-            while ((id = waitpid(-1, &stat, WNOHANG)) > 0)
+            for (struct list_elem *i = list_begin(&job_list); i != list_end(&job_list); i = list_next(i))
             {
-
-                if (WIFSIGNALED(stat))
-                {
-                    printf("This was the cause: %d\n", WTERMSIG(stat));
-                }
-                else if (WIFEXITED(stat))
-                {
-                    printf("This was the cause: %d\n", WEXITSTATUS(stat));
-                }
-                else if (WIFSTOPPED(stat))
-                {
-                    printf("This was the cause: %d\n", WSTOPSIG(stat));
-                }
-                else
-                {
-                    printf("No errors");
-                }
+                struct job *jobEntry = list_entry(i, struct job, elem);
+                print_job(jobEntry);
             }
         }
         else if (strcmp(command->argv[0], "bg") == 0)
