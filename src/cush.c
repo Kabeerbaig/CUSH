@@ -446,6 +446,7 @@ int main(int ac, char *av[])
             struct ast_pipeline *pipee = list_entry(e, struct ast_pipeline, elem);
             exePipelines(pipee);
         }
+
         signal_unblock(SIGCHLD);
 
         /* Free the command line.
@@ -465,75 +466,73 @@ int main(int ac, char *av[])
 static void exePipelines(struct ast_pipeline *pipee)
 {
     // TODO: free ast_pipeline *pipee after a built in command is executed
-    //  We loop through the pipeline to find the fist command and check to see if the command is a built in or requires posix spawn
-    for (struct list_elem *a = list_begin(&pipee->commands); a != list_end(&pipee->commands); a = list_next(a))
-    {
-        struct ast_command *command = list_entry(a, struct ast_command, elem);
+    // find the fist command and check to see if the command is a built in or requires posix spawn
+    struct list_elem *a = list_begin(&pipee->commands);
+    struct ast_command *command = list_entry(a, struct ast_command, elem);
 
-        if (strcmp(command->argv[0], "exit") == 0)
+    if (strcmp(command->argv[0], "exit") == 0)
+    {
+        exit(0);
+    }
+    else if (strcmp(command->argv[0], "jobs") == 0)
+    {
+        for (struct list_elem *i = list_begin(&job_list); i != list_end(&job_list); i = list_next(i))
         {
-            exit(0);
+            struct job *jobEntry = list_entry(i, struct job, elem);
+            print_job(jobEntry);
         }
-        else if (strcmp(command->argv[0], "jobs") == 0)
+    }
+    else if (strcmp(command->argv[0], "bg") == 0)
+    {
+        // SIGCONT singal will bring the process back to the foreground, bringing it back to a running state??
+        //  Crtl + Z will give a SIGTSTP singal to stop the process
+        //  Are we suppose to use the kill command in this function?
+        //  running in background and stop is not runnning at all
+        //  changing the status of the job and continuing but in stop you would send the stop signal
+    }
+    else if (strcmp(command->argv[0], "fg") == 0)
+    {
+        // Do I have to make a new job struct here?
+        // need to recover the job structure
+        pid_t id = atoi(command->argv[1]);
+        // receive in a struct variable
+        // if (id == NULL) {
+        // printf("Error with the id passed in.");
+        // }
+        if (jid2job[id] == NULL)
         {
-            for (struct list_elem *i = list_begin(&job_list); i != list_end(&job_list); i = list_next(i))
+            printf("JOB DOESNT EXIT\n");
+        }
+        else
+        {
+            struct job *sjob = jid2job[id];
+            // need to access the saved tty state to get terimal
+            // NEed a couple of check before running this, flag syntax
+            // pid_t pid = sjob->jid;
+            // pid_t pgid = getpgid(pid);
+            if (sjob == NULL)
             {
-                struct job *jobEntry = list_entry(i, struct job, elem);
-                print_job(jobEntry);
-            }
-        }
-        else if (strcmp(command->argv[0], "bg") == 0)
-        {
-            // SIGCONT singal will bring the process back to the foreground, bringing it back to a running state??
-            //  Crtl + Z will give a SIGTSTP singal to stop the process
-            //  Are we suppose to use the kill command in this function?
-            //  running in background and stop is not runnning at all
-            //  changing the status of the job and continuing but in stop you would send the stop signal
-        }
-        else if (strcmp(command->argv[0], "fg") == 0)
-        {
-            // Do I have to make a new job struct here?
-            // need to recover the job structure
-            pid_t id = atoi(command->argv[1]);
-            // receive in a struct variable
-            // if (id == NULL) {
-            // printf("Error with the id passed in.");
-            // }
-            if (jid2job[id] == NULL)
-            {
-                printf("JOB DOESNT EXIT\n");
+                printf("Error error");
             }
             else
             {
-                struct job *sjob = jid2job[id];
-                // need to access the saved tty state to get terimal
-                // NEed a couple of check before running this, flag syntax
-                // pid_t pid = sjob->jid;
-                // pid_t pgid = getpgid(pid);
-                if (sjob == NULL)
-                {
-                    printf("Error error");
-                }
-                else
-                {
-                    sjob->status = FOREGROUND;
+                sjob->status = FOREGROUND;
 
-                    termstate_give_terminal_to(&sjob->saved_tty_state, sjob->pgid);
-                }
-                wait_for_job(sjob);
+                termstate_give_terminal_to(&sjob->saved_tty_state, sjob->pgid);
             }
+            wait_for_job(sjob);
         }
-        // else if () {
+    }
+    // else if () {
 
-        // }
-        // else if () {
+    // }
+    // else if () {
 
-        // }
+    // }
 
-        else
-        {
-            nonBuiltIn(pipee, command);
-        }
+    else
+    {
+        nonBuiltIn(pipee, command);
     }
 }
 
@@ -560,17 +559,17 @@ static void nonBuiltIn(struct ast_pipeline *pipee, struct ast_command *command)
     // new process sets gpid as its own pid
     pid_t gpid;
     posix_spawnattr_setpgroup(&child_spawn_attr, 0);
-    posix_spawnattr_setflags(&child_spawn_attr, POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_USEVFORK);
 
     // set up for foreground process
     if (!pipee->bg_job)
     {
         posix_spawnattr_tcsetpgrp_np(&child_spawn_attr, termstate_get_tty_fd());
-        posix_spawnattr_setflags(&child_spawn_attr, POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_TCSETPGROUP);
+        posix_spawnattr_setflags(&child_spawn_attr, POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_USEVFORK | POSIX_SPAWN_TCSETPGROUP);
         curJob->status = FOREGROUND;
     }
     else
     {
+        posix_spawnattr_setflags(&child_spawn_attr, POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_USEVFORK);
         curJob->status = BACKGROUND;
     }
 
