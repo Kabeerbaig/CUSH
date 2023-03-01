@@ -55,6 +55,7 @@ enum job_status
     NEEDSTERMINAL, /* job is stopped because it was a background job
                       and requires exclusive terminal access */
     DONE,          /* job is exited normally*/
+    DELETE,        /*job should be deleted*/
 };
 
 struct job
@@ -90,7 +91,7 @@ static struct PIDs *createPIDs(size_t cap)
     struct PIDs *pPIDs = calloc(1, sizeof(struct PIDs));
     pPIDs->capacity = cap;
     pPIDs->size = 0;
-    pPIDs->data = calloc(cap, sizeof(pid_t));
+    pPIDs->data = calloc(cap + 1, sizeof(pid_t));
 
     return pPIDs;
 }
@@ -194,6 +195,8 @@ static const char *get_status(enum job_status status)
         return "Stopped (tty)";
     case DONE:
         return "Done";
+    case DELETE:
+        return "";
     default:
         return "Unknown";
     }
@@ -222,6 +225,24 @@ print_job(struct job *job)
     printf("[%d]\t%s\t\t(", job->jid, get_status(job->status));
     print_cmdline(job->pipe);
     printf(")\n");
+}
+
+static void deleteDoneJobs()
+{
+    for (struct list_elem *var = list_begin(&job_list); var != list_end(&job_list);)
+    {
+        struct job *j = list_entry(var, struct job, elem);
+        if (j->status == DELETE)
+        {
+            list_remove(var);
+            delete_job(j);
+        }
+        if (j->status == DONE)
+        {
+            j->status = DELETE;
+        }
+        list_next(var);
+    }
 }
 
 /*
@@ -340,8 +361,25 @@ handle_child_status(pid_t pid, int status)
             termstate_save(&newJobStructure->saved_tty_state);
         }
         // Checks to see if the process is terminated normally
-        // Process is dead here
-        else if (WIFEXITED(status) || WIFSIGNALED(status))
+
+        // process exits via exit()
+        else if (WIFEXITED(status))
+        {
+            newJobStructure->num_processes_alive--;
+
+            if (newJobStructure->status == FOREGROUND)
+            {
+                newJobStructure->status = DELETE;
+            }
+            // job is 100% complete here
+            if (newJobStructure->num_processes_alive == 0 && newJobStructure->status == BACKGROUND)
+            {
+                newJobStructure->status = DONE;
+            }
+
+            termstate_sample();
+        }
+        else if (WIFSIGNALED(status))
         {
             newJobStructure->num_processes_alive--;
             if (newJobStructure->status == FOREGROUND)
@@ -449,6 +487,17 @@ int main(int ac, char *av[])
 
         signal_unblock(SIGCHLD);
 
+        for (struct list_elem *e = list_begin(&job_list); e != list_end(&job_list); e = list_next(e))
+        {
+            struct job *j = list_entry(e, struct job, elem);
+
+            if (j->status == DELETE)
+            {
+                list_remove(&j->elem);
+                print_cmdline(j->pipe);
+                delete_job(j);
+            }
+        }
         /* Free the command line.
          * This will free the ast_pipeline objects still contained
          * in the ast_command_line.  Once you implement a job list
