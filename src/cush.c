@@ -506,6 +506,7 @@ int main(int ac, char *av[])
         if (result)
         {
             fprintf(stderr, "%s\n", historyElem);
+            ast_command_line_free(cline);
             cline = ast_parse_command_line(historyElem);
         }
 
