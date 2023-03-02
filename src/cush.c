@@ -868,8 +868,14 @@ static void non_built_in(struct ast_pipeline *pipee, struct ast_command *command
     }
 
     // clean the parent process attr and file
-    posix_spawn_file_actions_destroy(&child_file_attr);
-    posix_spawnattr_destroy(&child_spawn_attr);
+    if (posix_spawn_file_actions_destroy(&child_file_attr)) {
+        utils_error("Error destroying file actions");
+
+    }
+    if (posix_spawnattr_destroy(&child_spawn_attr)) {
+        utils_error("Error destroying attr");
+
+    }
 
     // close the parent process pipes
     if (pipe_array != NULL)
@@ -982,8 +988,13 @@ static void non_built_in(struct ast_pipeline *pipee, struct ast_command *command
         }
 
         // clean the process attr and file
-        posix_spawnattr_destroy(&child_spawn_attr);
-        posix_spawn_file_actions_destroy(&child_file_attr);
+        if (posix_spawnattr_destroy(&child_spawn_attr)) {
+            utils_error("Error destroying attr");
+
+        }
+        if (posix_spawn_file_actions_destroy(&child_file_attr)) {
+            utils_error("Error destroying file actions");
+        }
 
         // close pipes after use
         close(pipe_array[input]);
