@@ -54,6 +54,19 @@ expect_exact("you", "could not execute command 'echo you' from history")
 sendline("!3")
 expect_exact("evig ot", "could not execute command 'echo to give | rev' from history")
 
+# send new prompt
+sendline("echo woowoo up arrow soon")
+expect_exact("woowoo up arrow soon", "could not execute command 'echo woowoo up arrow soon'")
+
+# check up arrow twice
+sendline("[A[A") 
+expect_exact("evig ot", "could not execute command 'echo to give | rev' from history")
+
+# check up arrow twice once then down
+sendline("[A[A[B") 
+expect_exact("evig ot", "could not execute command 'echo to give | rev' from history")
+
+
 #exit
 sendline("exit")
 expect_exact("exit\r\n", "Shell output extraneous characters")
