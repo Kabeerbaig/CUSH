@@ -786,6 +786,11 @@ static void nonBuiltIn(struct ast_pipeline *pipee, struct ast_command *command)
         curJob->status = BACKGROUND;
     }
 
+    // Manages of the input pipe
+    if (pipee->iored_input) {
+        posix_spawn_file_actions_addopen(&child_file_attr, fileno(stdin), pipee->iored_input, O_RDWR, 0666);
+    }
+
     // set up pipes
     // get the number of pipes
     int numPipes = list_size(&pipee->commands) - 1;
@@ -815,6 +820,21 @@ static void nonBuiltIn(struct ast_pipeline *pipee, struct ast_command *command)
         }
 
         index++;
+    }
+    //check to see if the pipe is null or only has one command. sets up pipes demendind on the current pipe state
+    else if (pipee->iored_output) {
+        int term;
+        if (pipee->append_to_output) {
+            term = O_APPEND;
+        }
+        else {
+            term = O_TRUNC;
+        }
+        posix_spawn_file_actions_addopen(&child_file_attr, fileno(stdout), pipee->iored_output,O_WRONLY | term | O_CREAT, 0666);
+
+        if (command->dup_stderr_to_stdout) {
+            posix_spawn_file_actions_adddup2(&child_file_attr, fileno(stdout), fileno(stderr));
+        }
     }
 
     // create the first process, this is considered the gpid
@@ -847,6 +867,7 @@ static void nonBuiltIn(struct ast_pipeline *pipee, struct ast_command *command)
         addPID(curJob->PIDList, gpid);
         curJob->pgid = gpid;
         curJob->num_processes_alive++;
+    
     }
 
     // clean the parent process attr and file
@@ -904,6 +925,20 @@ static void nonBuiltIn(struct ast_pipeline *pipee, struct ast_command *command)
             }
             index++;
         }
+        else if (pipee->iored_output) {
+        int term;
+        if (pipee->append_to_output) {
+            term = O_APPEND;
+        }
+        else {
+            term = O_TRUNC;
+        }
+        posix_spawn_file_actions_addopen(&child_file_attr, fileno(stdout), pipee->iored_output,O_WRONLY | term | O_CREAT, 0666);
+
+        if (command->dup_stderr_to_stdout) {
+            posix_spawn_file_actions_adddup2(&child_file_attr, fileno(stdout), fileno(stderr));
+        }
+    }
 
         // if spawn successful, update job
         if (posix_spawnp(&spawnPID, command->argv[0], &child_file_attr, &child_spawn_attr, command->argv, environ))
