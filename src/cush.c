@@ -689,6 +689,19 @@ static void exePipelines(struct ast_pipeline *pipee)
         }
         ast_pipeline_free(pipee);
     }
+    else if (strcmp(command->argv[0], "cd") == 0)
+    {
+        char *path = command->argv[1];
+        if (!path)
+        {
+            path = getenv("HOME");
+        }
+        if (chdir(path) == -1)
+        {
+            utils_error("cd: %s: No such file or directory\n", path);
+        }
+        ast_pipeline_free(pipee);
+    }
 
     else
     {
