@@ -1,17 +1,28 @@
-cush> /tmp/tmpPGknTf -divzero/tmp/tmpPGknTf -divzero
+cush> mkdir asfnaibapeimkdir asfnaibapei
 
-Floating point exception
-cush> /tmp/tmpPGknTf -segfault/tmp/tmpPGknTf -segfault
+cush> cd asfnaibapeicd asfnaibapei
 
-Segmentation fault
-cush> /tmp/tmpPGknTf -abort/tmp/tmpPGknTf -abort
+cush> pwdpwd
 
-Aborted
-cush> /tmp/tmpPGknTf/tmp/tmpPGknTf
+/home/ugrads/majors/jtomas/3214/cs3214-cush/src/asfnaibapei
+cush> cd ../cd ../
 
-Killed
-cush> /tmp/tmpPGknTf/tmp/tmpPGknTf
+cush> pwdpwd
 
-Terminated
+/home/ugrads/majors/jtomas/3214/cs3214-cush/src
+cush> rmdir asfnaibapeirmdir asfnaibapei
+
+cush> cd asfnaibapeicd asfnaibapei
+
+cd: asfnaibapei: No such file or directory
+No such file or directory
+cush> pwdpwd
+
+/home/ugrads/majors/jtomas/3214/cs3214-cush/src
+cush> cdcd
+
+cush> pwdpwd
+
+/home/ugrads/majors/jtomas
 cush> exitexit
 
