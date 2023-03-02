@@ -55,6 +55,7 @@ enum job_status
     NEEDSTERMINAL, /* job is stopped because it was a background job
                       and requires exclusive terminal access */
     DONE,          /* job is exited normally*/
+    DELETE,        /*job should be deleted*/
 };
 
 struct job
@@ -90,7 +91,7 @@ static struct PIDs *createPIDs(size_t cap)
     struct PIDs *pPIDs = calloc(1, sizeof(struct PIDs));
     pPIDs->capacity = cap;
     pPIDs->size = 0;
-    pPIDs->data = calloc(cap, sizeof(pid_t));
+    pPIDs->data = calloc(cap + 1, sizeof(pid_t));
 
     return pPIDs;
 }
@@ -194,6 +195,8 @@ static const char *get_status(enum job_status status)
         return "Stopped (tty)";
     case DONE:
         return "Done";
+    case DELETE:
+        return "";
     default:
         return "Unknown";
     }
@@ -222,6 +225,24 @@ print_job(struct job *job)
     printf("[%d]\t%s\t\t(", job->jid, get_status(job->status));
     print_cmdline(job->pipe);
     printf(")\n");
+}
+
+static void deleteDoneJobs()
+{
+    for (struct list_elem *var = list_begin(&job_list); var != list_end(&job_list);)
+    {
+        struct job *j = list_entry(var, struct job, elem);
+        if (j->status == DELETE)
+        {
+            list_remove(var);
+            delete_job(j);
+        }
+        if (j->status == DONE)
+        {
+            j->status = DELETE;
+        }
+        list_next(var);
+    }
 }
 
 /*
@@ -339,8 +360,25 @@ handle_child_status(pid_t pid, int status)
             
         }
         // Checks to see if the process is terminated normally
-        // Process is dead here
-        else if (WIFEXITED(status) || WIFSIGNALED(status))
+
+        // process exits via exit()
+        else if (WIFEXITED(status))
+        {
+            newJobStructure->num_processes_alive--;
+
+            if (newJobStructure->status == FOREGROUND)
+            {
+                newJobStructure->status = DELETE;
+            }
+            // job is 100% complete here
+            if (newJobStructure->num_processes_alive == 0 && newJobStructure->status == BACKGROUND)
+            {
+                newJobStructure->status = DONE;
+            }
+
+            termstate_sample();
+        }
+        else if (WIFSIGNALED(status))
         {
             newJobStructure->num_processes_alive--;
             if (newJobStructure->num_processes_alive == 0) {
@@ -449,8 +487,20 @@ int main(int ac, char *av[])
             struct ast_pipeline *pipee = list_entry(e, struct ast_pipeline, elem);
             exePipelines(pipee);
         }
+
         signal_unblock(SIGCHLD);
 
+        for (struct list_elem *e = list_begin(&job_list); e != list_end(&job_list); e = list_next(e))
+        {
+            struct job *j = list_entry(e, struct job, elem);
+
+            if (j->status == DELETE)
+            {
+                list_remove(&j->elem);
+                print_cmdline(j->pipe);
+                delete_job(j);
+            }
+        }
         /* Free the command line.
          * This will free the ast_pipeline objects still contained
          * in the ast_command_line.  Once you implement a job list
@@ -468,24 +518,40 @@ int main(int ac, char *av[])
 static void exePipelines(struct ast_pipeline *pipee)
 {
     // TODO: free ast_pipeline *pipee after a built in command is executed
-    //  We loop through the pipeline to find the fist command and check to see if the command is a built in or requires posix spawn
-    for (struct list_elem *a = list_begin(&pipee->commands); a != list_end(&pipee->commands); a = list_next(a))
-    {
-        struct ast_command *command = list_entry(a, struct ast_command, elem);
+    // find the fist command and check to see if the command is a built in or requires posix spawn
+    struct list_elem *a = list_begin(&pipee->commands);
+    struct ast_command *command = list_entry(a, struct ast_command, elem);
 
-        if (strcmp(command->argv[0], "exit") == 0)
+    if (strcmp(command->argv[0], "exit") == 0)
+    {
+        exit(0);
+    }
+    else if (strcmp(command->argv[0], "jobs") == 0)
+    {
+        for (struct list_elem *i = list_begin(&job_list); i != list_end(&job_list); i = list_next(i))
         {
-            exit(0);
+            struct job *jobEntry = list_entry(i, struct job, elem);
+            print_job(jobEntry);
         }
-        else if (strcmp(command->argv[0], "jobs") == 0)
-        {
-            for (struct list_elem *i = list_begin(&job_list); i != list_end(&job_list); i = list_next(i))
-            {
-                struct job *jobEntry = list_entry(i, struct job, elem);
-                print_job(jobEntry);
-            }
-        }
-        else if (strcmp(command->argv[0], "bg") == 0)
+    }
+    else if (strcmp(command->argv[0], "bg") == 0)
+    {
+        // SIGCONT singal will bring the process back to the foreground, bringing it back to a running state??
+        //  Crtl + Z will give a SIGTSTP singal to stop the process
+        //  Are we suppose to use the kill command in this function?
+        //  running in background and stop is not runnning at all
+        //  changing the status of the job and continuing but in stop you would send the stop signal
+    }
+    else if (strcmp(command->argv[0], "fg") == 0)
+    {
+        // Do I have to make a new job struct here?
+        // need to recover the job structure
+        pid_t id = atoi(command->argv[1]);
+        // receive in a struct variable
+        // if (id == NULL) {
+        // printf("Error with the id passed in.");
+        // }
+        if (jid2job[id] == NULL)
         {
             // SIGCONT singal will bring the process back to the foreground, bringing it back to a running state??
             //  Crtl + Z will give a SIGTSTP singal to stop the process
@@ -527,7 +593,7 @@ static void exePipelines(struct ast_pipeline *pipee)
 
 
         }
-        else if (strcmp(command->argv[0], "fg") == 0)
+        else
         {
             // Do I have to make a new job struct here?
             // need to recover the job structure
@@ -583,6 +649,7 @@ static void exePipelines(struct ast_pipeline *pipee)
                 }
 
             }
+            wait_for_job(sjob);
         }
         else if (strcmp(command->argv[0], "stop") == 0) {
             if (command->argv[1] == NULL) {
@@ -605,10 +672,9 @@ static void exePipelines(struct ast_pipeline *pipee)
             }
         }
 
-        else
-        {
-            nonBuiltIn(pipee, command);
-        }
+    else
+    {
+        nonBuiltIn(pipee, command);
     }
 }
 
@@ -635,17 +701,17 @@ static void nonBuiltIn(struct ast_pipeline *pipee, struct ast_command *command)
     // new process sets gpid as its own pid
     pid_t gpid;
     posix_spawnattr_setpgroup(&child_spawn_attr, 0);
-    posix_spawnattr_setflags(&child_spawn_attr, POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_USEVFORK);
 
     // set up for foreground process
     if (!pipee->bg_job)
     {
         posix_spawnattr_tcsetpgrp_np(&child_spawn_attr, termstate_get_tty_fd());
-        posix_spawnattr_setflags(&child_spawn_attr, POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_TCSETPGROUP);
+        posix_spawnattr_setflags(&child_spawn_attr, POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_USEVFORK | POSIX_SPAWN_TCSETPGROUP);
         curJob->status = FOREGROUND;
     }
     else
     {
+        posix_spawnattr_setflags(&child_spawn_attr, POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_USEVFORK);
         curJob->status = BACKGROUND;
     }
 
