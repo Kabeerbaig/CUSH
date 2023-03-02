@@ -27,8 +27,8 @@
 #include "list.h"
 extern char **environ;
 static void handle_child_status(pid_t pid, int status);
-static void exePipelines(struct ast_pipeline *pipee);
-static void nonBuiltIn(struct ast_pipeline *pipee, struct ast_command *command);
+static void exe_pipelines(struct ast_pipeline *pipee);
+static void non_built_in(struct ast_pipeline *pipee, struct ast_command *command);
 
 static void usage(char *progname)
 {
@@ -70,7 +70,7 @@ struct job
                                        stopped after having been in foreground */
 
     /* Add additional fields here if needed. */
-    struct PIDs *PIDList; // list of PIDs that a job has
+    struct PIDs *PID_list; // list of PIDs that a job has
 };
 
 /**
@@ -80,13 +80,13 @@ struct PIDs
 {
     pid_t *data;     // array of PID
     size_t size;     // max amount of PID
-    size_t currSize; // number of PID
+    size_t curr_size; // number of PID
 };
 
-static void printPIDs(struct PIDs *const pPIDs)
+static void print_PIDs(struct PIDs *const pPIDs)
 {
     printf("THE PIDS ARE\n");
-    for (size_t i = 0; i < pPIDs->currSize; i++)
+    for (size_t i = 0; i < pPIDs->curr_size; i++)
     {
         printf("%d ", pPIDs->data[i]);
     }
@@ -96,11 +96,11 @@ static void printPIDs(struct PIDs *const pPIDs)
 /**
  * Create PIDs List
  */
-static struct PIDs *createPIDs(size_t cap)
+static struct PIDs *create_PIDs(size_t cap)
 {
     struct PIDs *pPIDs = calloc(1, sizeof(struct PIDs));
     pPIDs->size = cap;
-    pPIDs->currSize = 0;
+    pPIDs->curr_size = 0;
     pPIDs->data = calloc(cap + 1, sizeof(pid_t));
 
     return pPIDs;
@@ -109,20 +109,20 @@ static struct PIDs *createPIDs(size_t cap)
 /**
  * Add a pid to a PID List
  */
-static void addPID(struct PIDs *const pPIDs, pid_t pid)
+static void add_PID(struct PIDs *const pPIDs, pid_t pid)
 {
-    // printf("ADDING A NEW PID at index %ld   %d\n", pPIDs->currSize, pid);
-    pPIDs->data[pPIDs->currSize] = pid;
-    pPIDs->currSize++;
-    // printf("RESULT at index %ld   %d\n", pPIDs->currSize - 1, pPIDs->data[pPIDs->currSize - 1]);
+    // printf("ADDING A NEW PID at index %ld   %d\n", pPIDs->curr_size, pid);
+    pPIDs->data[pPIDs->curr_size] = pid;
+    pPIDs->curr_size++;
+    // printf("RESULT at index %ld   %d\n", pPIDs->curr_size - 1, pPIDs->data[pPIDs->curr_size - 1]);
 }
 
 /**
  * See if a PID is in the PID List
  */
-static bool findPID(struct PIDs *const pPIDs, pid_t pid)
+static bool find_PID(struct PIDs *const pPIDs, pid_t pid)
 {
-    for (size_t i = 0; i < pPIDs->currSize; i++)
+    for (size_t i = 0; i < pPIDs->curr_size; i++)
     {
         if (pPIDs->data[i] == pid)
         {
@@ -135,7 +135,7 @@ static bool findPID(struct PIDs *const pPIDs, pid_t pid)
 /**
  * Clean the PID
  */
-static void cleanPID(struct PIDs *const pPIDs)
+static void clean_PID(struct PIDs *const pPIDs)
 {
     free(pPIDs->data);
     free(pPIDs);
@@ -191,7 +191,7 @@ static void delete_job(struct job *job)
     jid2job[jid]->jid = -1;
     jid2job[jid] = NULL;
     ast_pipeline_free(job->pipe);
-    cleanPID(job->PIDList);
+    clean_PID(job->PID_list);
     free(job);
 }
 
@@ -244,7 +244,7 @@ print_job(struct job *job)
     }
 }
 
-static void deleteDoneJobs()
+static void delete_done_jobs()
 {
     for (struct list_elem *var = list_begin(&job_list); var != list_end(&job_list);)
     {
@@ -374,9 +374,9 @@ handle_child_status(pid_t pid, int status)
 
     for (struct list_elem *var = list_begin(&job_list); var != list_end(&job_list); var = list_next(var))
     {
-        struct job *newJobStructure = list_entry(var, struct job, elem);
+        struct job *sjob = list_entry(var, struct job, elem);
 
-        if (!findPID(newJobStructure->PIDList, pid))
+        if (!find_PID(sjob->PID_list, pid))
         {
             continue;
         }
@@ -388,42 +388,42 @@ handle_child_status(pid_t pid, int status)
 
             if (WSTOPSIG(status) == SIGTSTP || WSTOPSIG(status) == SIGSTOP)
             {
-                newJobStructure->status = STOPPED;
-                print_job(newJobStructure);
+                sjob->status = STOPPED;
+                print_job(sjob);
             }
             else if (WSTOPSIG(status) == SIGTTOU || WSTOPSIG(status) == SIGTTIN)
             {
-                newJobStructure->status = NEEDSTERMINAL;
+                sjob->status = NEEDSTERMINAL;
             }
-            termstate_save(&newJobStructure->saved_tty_state);
+            termstate_save(&sjob->saved_tty_state);
         }
         // Checks to see if the process is terminated normally
 
         // process exits via exit()
         else if (WIFEXITED(status))
         {
-            newJobStructure->num_processes_alive--;
+            sjob->num_processes_alive--;
 
-            if (newJobStructure->status == FOREGROUND && newJobStructure->num_processes_alive == 0)
+            if (sjob->status == FOREGROUND && sjob->num_processes_alive == 0)
             {
-                newJobStructure->status = DELETE;
+                sjob->status = DELETE;
                 termstate_sample();
             }
             // job is 100% complete here
-            if (newJobStructure->num_processes_alive == 0 && newJobStructure->status == BACKGROUND)
+            if (sjob->num_processes_alive == 0 && sjob->status == BACKGROUND)
             {
-                newJobStructure->status = DONE;
+                sjob->status = DONE;
             }
         }
         // signal
         else if (WIFSIGNALED(status))
         {
-            // newJobStructure->num_processes_alive--;
-            // if (newJobStructure->num_processes_alive == 0)
+            // sjob->num_processes_alive--;
+            // if (sjob->num_processes_alive == 0)
             // {
-            //     newJobStructure->status = DELETE;
+            //     sjob->status = DELETE;
             // }
-            newJobStructure->status = DELETE;
+            sjob->status = DELETE;
 
             int term_sig = WTERMSIG(status);
             printf("%s\n", strsignal(term_sig));
@@ -499,7 +499,9 @@ int main(int ac, char *av[])
         HANDLE COMMAND LINE HERE
         =====================================================================================================
         */
-        signal_block(SIGCHLD);
+        if (signal_block(SIGCHLD)) {
+            utils_error("Error blocking SIGCHLD");
+        }
         list_front(&cline->pipes);
         // loop through the command line and execute the different pipes
         for (struct list_elem *e = list_begin(&cline->pipes); e != list_end(&cline->pipes);)
@@ -507,10 +509,12 @@ int main(int ac, char *av[])
             struct ast_pipeline *pipee = list_entry(e, struct ast_pipeline, elem);
             e = list_remove(e);
 
-            exePipelines(pipee);
+            exe_pipelines(pipee);
         }
 
-        signal_unblock(SIGCHLD);
+        if (signal_unblock(SIGCHLD)) {
+            utils_error("Error blocking SIGCHLD");
+        }
 
         for (struct list_elem *e = list_begin(&job_list); e != list_end(&job_list);)
         {
@@ -548,7 +552,7 @@ int main(int ac, char *av[])
     return 0;
 }
 
-static void exePipelines(struct ast_pipeline *pipee)
+static void exe_pipelines(struct ast_pipeline *pipee)
 {
     // TODO: free ast_pipeline *pipee after a built in command is executed
     // find the fist command and check to see if the command is a built in or requires posix spawn
@@ -563,8 +567,8 @@ static void exePipelines(struct ast_pipeline *pipee)
     {
         for (struct list_elem *i = list_begin(&job_list); i != list_end(&job_list); i = list_next(i))
         {
-            struct job *jobEntry = list_entry(i, struct job, elem);
-            print_job(jobEntry);
+            struct job *job_entry = list_entry(i, struct job, elem);
+            print_job(job_entry);
         }
         ast_pipeline_free(pipee);
     }
@@ -633,7 +637,9 @@ static void exePipelines(struct ast_pipeline *pipee)
                 printf("\n");
 
                 termstate_give_terminal_to(state, sjob->pgid);
-                killpg(sjob->pgid, SIGCONT);
+                if (killpg(sjob->pgid, SIGCONT)) {
+                    utils_error("Error sending SIGCONT in fg");
+                }
                 wait_for_job(sjob);
                 termstate_give_terminal_back_to_shell();
             }
@@ -659,7 +665,9 @@ static void exePipelines(struct ast_pipeline *pipee)
             else if (sjob->jid == id)
             {
                 sjob->status = STOPPED;
-                killpg(sjob->pgid, SIGSTOP);
+                if (killpg(sjob->pgid, SIGSTOP)) {
+                    utils_error("Error dending SIGSTOP in stop");
+                }
                 termstate_give_terminal_back_to_shell();
             }
         }
@@ -683,7 +691,9 @@ static void exePipelines(struct ast_pipeline *pipee)
             }
             else if (sjob->jid == id)
             {
-                killpg(sjob->pgid, SIGKILL);
+               if (killpg(sjob->pgid, SIGKILL)) {
+                utils_error("Error sending SIGKILL in kill");
+               }
                 termstate_give_terminal_back_to_shell();
             }
         }
@@ -705,22 +715,26 @@ static void exePipelines(struct ast_pipeline *pipee)
 
     else
     {
-        nonBuiltIn(pipee, command);
+        non_built_in(pipee, command);
     }
 }
 
 /**
  * Handles non built in commands given to the command line
  */
-static void nonBuiltIn(struct ast_pipeline *pipee, struct ast_command *command)
+static void non_built_in(struct ast_pipeline *pipee, struct ast_command *command)
 {
-    struct job *curJob = add_job(pipee);
+    struct job *cur_job = add_job(pipee);
 
     posix_spawn_file_actions_t child_file_attr;
     posix_spawnattr_t child_spawn_attr;
 
-    posix_spawn_file_actions_init(&child_file_attr);
-    posix_spawnattr_init(&child_spawn_attr);
+    if (posix_spawn_file_actions_init(&child_file_attr)) {
+        utils_error("Error initializing child file attr");
+    }
+    if (posix_spawnattr_init(&child_spawn_attr)) {
+        utils_error("Error initializing child spawn attr");
+    }
 
     // posix_spawnattr_setflags // flags will defer depending on if the job is foreground or background
     //  if its a foreground setpgroup and tcsetgroup
@@ -731,54 +745,72 @@ static void nonBuiltIn(struct ast_pipeline *pipee, struct ast_command *command)
 
     // new process sets gpid as its own pid
     pid_t gpid;
-    posix_spawnattr_setpgroup(&child_spawn_attr, 0);
+    if (posix_spawnattr_setpgroup(&child_spawn_attr, 0)) {
+        utils_error("Error storing child spawn attr pgroup");
+
+    }
 
     // set up for foreground process
     if (!pipee->bg_job)
     {
-        posix_spawnattr_tcsetpgrp_np(&child_spawn_attr, termstate_get_tty_fd());
-        posix_spawnattr_setflags(&child_spawn_attr, POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_USEVFORK | POSIX_SPAWN_TCSETPGROUP);
-        curJob->status = FOREGROUND;
+        if (posix_spawnattr_tcsetpgrp_np(&child_spawn_attr, termstate_get_tty_fd())) {
+            utils_error("Error in terminal access setup");
+        }
+
+        if (posix_spawnattr_setflags(&child_spawn_attr, POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_USEVFORK | POSIX_SPAWN_TCSETPGROUP)) {
+            utils_error("Error could not set proper flags for child spawn attr");
+        }
+        cur_job->status = FOREGROUND;
     }
     else
     {
-        posix_spawnattr_setflags(&child_spawn_attr, POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_USEVFORK);
-        curJob->status = BACKGROUND;
+        if (posix_spawnattr_setflags(&child_spawn_attr, POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_USEVFORK)) {
+            utils_error("Error could not set proper flags for child spawn attr");
+        }
+        cur_job->status = BACKGROUND;
     }
 
     // Manages of the input pipe
     if (pipee->iored_input) {
-        posix_spawn_file_actions_addopen(&child_file_attr, fileno(stdin), pipee->iored_input, O_RDWR, 0666);
+        if (posix_spawn_file_actions_addopen(&child_file_attr, fileno(stdin), pipee->iored_input, O_RDWR, 0666)) {
+            utils_error("Error chould not open child file arrt I/O");
+
+        }
     }
 
     // set up pipes
     // get the number of pipes
-    int numPipes = list_size(&pipee->commands) - 1;
-    if (numPipes == 0)
+    int num_pipes = list_size(&pipee->commands) - 1;
+    if (num_pipes == 0)
     {
-        curJob->PIDList = createPIDs(1);
+        cur_job->PID_list = create_PIDs(1);
     }
     else
     {
-        curJob->PIDList = createPIDs(numPipes);
+        cur_job->PID_list = create_PIDs(num_pipes);
     }
 
     // create an array for the pipes
-    int *pipeArray = NULL;
+    int *pipe_array = NULL;
     int index = 0;
     // if needed to pipe, wire stdin and stdout
-    if (numPipes != 0)
+    if (num_pipes != 0)
     {
-        pipeArray = calloc((numPipes)*2, sizeof(int));
+        pipe_array = calloc((num_pipes)*2, sizeof(int));
 
-        pipe2(&pipeArray[0], O_CLOEXEC);
+        pipe2(&pipe_array[0], O_CLOEXEC);
 
-        posix_spawn_file_actions_adddup2(&child_file_attr, pipeArray[1], fileno(stdout));
+        if (posix_spawn_file_actions_adddup2(&child_file_attr, pipe_array[1], fileno(stdout))) {
+            utils_error("Error calling dup2 on file descriptors");
+
+        }
         if (command->dup_stderr_to_stdout)
         {
-            posix_spawn_file_actions_adddup2(&child_file_attr, pipeArray[1], fileno(stderr));
-        }
+            if (posix_spawn_file_actions_adddup2(&child_file_attr, pipe_array[1], fileno(stderr))) {
+                 utils_error("Error calling dup2 on file descriptors");
 
+            }
+        }
         index++;
     }
     //check to see if the pipe is null or only has one command. sets up pipes demendind on the current pipe state
@@ -790,10 +822,15 @@ static void nonBuiltIn(struct ast_pipeline *pipee, struct ast_command *command)
         else {
             term = O_TRUNC;
         }
-        posix_spawn_file_actions_addopen(&child_file_attr, fileno(stdout), pipee->iored_output,O_WRONLY | term | O_CREAT, 0666);
+            if (posix_spawn_file_actions_addopen(&child_file_attr, fileno(stdout), pipee->iored_output,O_WRONLY | term | O_CREAT, 0666)) {
+                utils_error("Error chould not open child file arrt I/O");
+            }
 
         if (command->dup_stderr_to_stdout) {
-            posix_spawn_file_actions_adddup2(&child_file_attr, fileno(stdout), fileno(stderr));
+           if (posix_spawn_file_actions_adddup2(&child_file_attr, fileno(stdout), fileno(stderr))) {
+                utils_error("Error calling dup2 on file descriptors");
+
+           }
         }
     }
 
@@ -807,16 +844,16 @@ static void nonBuiltIn(struct ast_pipeline *pipee, struct ast_command *command)
         posix_spawnattr_destroy(&child_spawn_attr);
 
         // close the parent process pipes
-        if (pipeArray != NULL)
+        if (pipe_array != NULL)
         {
-            close(pipeArray[1]);
-            close(pipeArray[0]);
+            close(pipe_array[1]);
+            close(pipe_array[0]);
         }
 
-        struct list_elem *toBeRemoved = list_back(&job_list);
-        list_remove(toBeRemoved);
+        struct list_elem *to_be_removed = list_back(&job_list);
+        list_remove(to_be_removed);
 
-        delete_job(curJob);
+        delete_job(cur_job);
 
         termstate_give_terminal_back_to_shell();
         return;
@@ -824,9 +861,9 @@ static void nonBuiltIn(struct ast_pipeline *pipee, struct ast_command *command)
     else
     {
         // printf("%d is the parent process\n", gpid);
-        addPID(curJob->PIDList, gpid);
-        curJob->pgid = gpid;
-        curJob->num_processes_alive++;
+        add_PID(cur_job->PID_list, gpid);
+        cur_job->pgid = gpid;
+        cur_job->num_processes_alive++;
     
     }
 
@@ -835,9 +872,9 @@ static void nonBuiltIn(struct ast_pipeline *pipee, struct ast_command *command)
     posix_spawnattr_destroy(&child_spawn_attr);
 
     // close the parent process pipes
-    if (pipeArray != NULL)
+    if (pipe_array != NULL)
     {
-        close(pipeArray[1]);
+        close(pipe_array[1]);
     
     }
 
@@ -846,10 +883,10 @@ static void nonBuiltIn(struct ast_pipeline *pipee, struct ast_command *command)
     pipeCommand = list_next(pipeCommand);
 
     struct list_elem *end = list_back(&pipee->commands);
-    struct ast_command *endCommand = list_entry(end, struct ast_command, elem);
+    struct ast_command *end_command = list_entry(end, struct ast_command, elem);
 
     // loop to go through other commands
-    while (command != endCommand)
+    while (command != end_command)
     {
         // get the command and get next
         command = list_entry(pipeCommand, struct ast_command, elem);
@@ -860,12 +897,20 @@ static void nonBuiltIn(struct ast_pipeline *pipee, struct ast_command *command)
         posix_spawn_file_actions_t child_file_attr;
         posix_spawnattr_t child_spawn_attr;
 
-        posix_spawn_file_actions_init(&child_file_attr);
-        posix_spawnattr_init(&child_spawn_attr);
+        if (posix_spawn_file_actions_init(&child_file_attr) != 0){
+            utils_error("failure initalizing file actions");
+        }
+        if (posix_spawnattr_init(&child_spawn_attr)) {
+            utils_error("failure initalizing child spawn attr");
+        }
 
         // set gpid
-        posix_spawnattr_setpgroup(&child_spawn_attr, gpid);
-        posix_spawnattr_setflags(&child_spawn_attr, POSIX_SPAWN_SETPGROUP);
+        if (posix_spawnattr_setpgroup(&child_spawn_attr, gpid)) {
+            utils_error("Error setting pgroup");
+        }
+        if (posix_spawnattr_setflags(&child_spawn_attr, POSIX_SPAWN_SETPGROUP)) {
+            utils_error("Error setting flags");
+        }
 
     
 
@@ -874,17 +919,23 @@ static void nonBuiltIn(struct ast_pipeline *pipee, struct ast_command *command)
         int output = (index * 2) + 1;
 
         // wire process inputs
-        posix_spawn_file_actions_adddup2(&child_file_attr, pipeArray[input], fileno(stdin));
+        if (posix_spawn_file_actions_adddup2(&child_file_attr, pipe_array[input], fileno(stdin))) {
+            utils_error("Error calling dup2 on file descriptors");
+        }
 
         // if not the last command, then need to wire to other pipe
-        if (command != endCommand)
+        if (command != end_command)
         {
             // printf("Current pipes input: %d, output: %d being wired to: %d\n", input, output, (index * 2));
-            pipe2(&pipeArray[index * 2], O_CLOEXEC);
-            posix_spawn_file_actions_adddup2(&child_file_attr, pipeArray[output], fileno(stdout));
+            pipe2(&pipe_array[index * 2], O_CLOEXEC);
+            if (posix_spawn_file_actions_adddup2(&child_file_attr, pipe_array[output], fileno(stdout))) {
+                utils_error("Error calling dup2 on file descriptors");
+            }
             if (command->dup_stderr_to_stdout)
             {
-                posix_spawn_file_actions_adddup2(&child_file_attr, pipeArray[output], fileno(stderr));
+               if (posix_spawn_file_actions_adddup2(&child_file_attr, pipe_array[output], fileno(stderr))) {
+                utils_error("Error calling dup2 on file descriptors");
+               }
             }
             index++;
         }
@@ -896,10 +947,14 @@ static void nonBuiltIn(struct ast_pipeline *pipee, struct ast_command *command)
         else {
             term = O_TRUNC;
         }
-        posix_spawn_file_actions_addopen(&child_file_attr, fileno(stdout), pipee->iored_output,O_WRONLY | term | O_CREAT, 0666);
+         if (posix_spawn_file_actions_addopen(&child_file_attr, fileno(stdout), pipee->iored_output,O_WRONLY | term | O_CREAT, 0666)) {
+            utils_error("Error opening file actions");
+         }
 
         if (command->dup_stderr_to_stdout) {
-            posix_spawn_file_actions_adddup2(&child_file_attr, fileno(stdout), fileno(stderr));
+           if ( posix_spawn_file_actions_adddup2(&child_file_attr, fileno(stdout), fileno(stderr))) {
+            utils_error("Error calling dup2 on file descriptors");
+           }
         }
     }
 
@@ -911,18 +966,18 @@ static void nonBuiltIn(struct ast_pipeline *pipee, struct ast_command *command)
             posix_spawn_file_actions_destroy(&child_file_attr);
             posix_spawnattr_destroy(&child_spawn_attr);
 
-            struct list_elem *toBeRemoved = list_back(&job_list);
-            list_remove(toBeRemoved);
+            struct list_elem *to_be_removed = list_back(&job_list);
+            list_remove(to_be_removed);
 
-            delete_job(curJob);
+            delete_job(cur_job);
 
             termstate_give_terminal_back_to_shell();
             return;
         }
         else
         {
-            curJob->num_processes_alive++;
-            addPID(curJob->PIDList, spawnPID);
+            cur_job->num_processes_alive++;
+            add_PID(cur_job->PID_list, spawnPID);
             // printf("%d is the child process\n", spawnPID);
         }
 
@@ -931,27 +986,27 @@ static void nonBuiltIn(struct ast_pipeline *pipee, struct ast_command *command)
         posix_spawn_file_actions_destroy(&child_file_attr);
 
         // close pipes after use
-        close(pipeArray[input]);
-        if (command != endCommand)
+        close(pipe_array[input]);
+        if (command != end_command)
         {
-            close(pipeArray[output]);
+            close(pipe_array[output]);
         }
     }
 
     // wait for the job to finish
     if (!pipee->bg_job)
     {
-        wait_for_job(curJob);
+        wait_for_job(cur_job);
         termstate_give_terminal_back_to_shell();
     }
     else
     {
-        printf("[%d] %d\n", curJob->jid, curJob->pgid);
+        printf("[%d] %d\n", cur_job->jid, cur_job->pgid);
     }
 
     // clean the pipe array after use
-    if (pipeArray)
+    if (pipe_array)
     {
-        free(pipeArray);
+        free(pipe_array);
     }
 }
