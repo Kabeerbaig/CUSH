@@ -37,5 +37,14 @@ cush> !3!3
 
 echo to give | rev
 evig ot
+cush> echo woowoo up arrow soonecho woowoo up arrow soon
+
+woowoo up arrow soon
+cush> [A[Aecho woowoo up arrow soon[C[C[C[C[C[C[C[C[C[C[C[7Pto give | rev
+
+evig ot
+cush> [A[A[Becho to give | rev[C[C[C[C[C[C[C[C[C[C[Cwoowoo up arrow soon[C[C[C[C[C[C[C[C[C[C[C[7Pto give | rev
+
+evig ot
 cush> exitexit
 
