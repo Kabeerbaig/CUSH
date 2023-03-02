@@ -1,4 +1,50 @@
-cush> echo /tmp/tmpg7zlRC-cush-glob-tests/*echo /tmp/tmpg7zlRC-cush-glob-tests/*
+cush> echo neverecho never
 
-/tmp/tmpg7zlRC-cush-glob-tests/*
-cush> 
+never
+cush> echo goingecho going
+
+going
+cush> echo to give | revecho to give | rev
+
+evig ot
+cush> echo youecho you
+
+you
+cush> echo upecho up
+
+up
+cush> historyhistory
+
+  1 echo never
+  2 echo going
+  3 echo to give | rev
+  4 echo you
+  5 echo up
+  6 history
+cush> !-2!-2
+
+echo up
+up
+cush> !!!!
+
+echo up
+up
+cush> !echo you!echo you
+
+echo up you
+up you
+cush> !3!3
+
+echo to give | rev
+evig ot
+cush> echo woowoo up arrow soonecho woowoo up arrow soon
+
+woowoo up arrow soon
+cush> [A[Aecho woowoo up arrow soon[C[C[C[C[C[C[C[C[C[C[C[7Pto give | rev
+
+evig ot
+cush> [A[A[Becho to give | rev[C[C[C[C[C[C[C[C[C[C[Cwoowoo up arrow soon[C[C[C[C[C[C[C[C[C[C[C[7Pto give | rev
+
+evig ot
+cush> exitexit
+

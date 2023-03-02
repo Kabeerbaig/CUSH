@@ -7,6 +7,7 @@
 #define _GNU_SOURCE 1
 #include <stdio.h>
 #include <readline/readline.h>
+#include <readline/history.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
@@ -483,8 +484,6 @@ int main(int ac, char *av[])
             break;
 
         struct ast_command_line *cline = ast_parse_command_line(cmdline);
-
-        free(cmdline);
         if (cline == NULL) /* Error in command line */
             continue;
 
@@ -496,6 +495,31 @@ int main(int ac, char *av[])
 
         /*
         =====================================================================================================
+        HANDLE HISTORY HERE
+        =====================================================================================================
+        */
+
+        using_history();
+        char *historyElem;
+
+        int result = history_expand(cmdline, &historyElem);
+        if (result)
+        {
+            fprintf(stderr, "%s\n", historyElem);
+            ast_command_line_free(cline);
+            cline = ast_parse_command_line(historyElem);
+        }
+
+        if (result < 0 || result == 2)
+        {
+            free(historyElem);
+            continue;
+        }
+
+        add_history(historyElem);
+
+        /*
+        =====================================================================================================
         HANDLE COMMAND LINE HERE
         =====================================================================================================
         */
@@ -503,13 +527,15 @@ int main(int ac, char *av[])
             utils_error("Error blocking SIGCHLD");
         }
         list_front(&cline->pipes);
+
         // loop through the command line and execute the different pipes
         for (struct list_elem *e = list_begin(&cline->pipes); e != list_end(&cline->pipes);)
         {
-            struct ast_pipeline *pipee = list_entry(e, struct ast_pipeline, elem);
-            e = list_remove(e);
 
-            exe_pipelines(pipee);
+            struct ast_pipeline *pipee = list_entry(e, struct ast_pipeline, elem);
+
+            e = list_remove(e);
+            exePipelines(pipee);
         }
 
         if (signal_unblock(SIGCHLD)) {
@@ -546,6 +572,8 @@ int main(int ac, char *av[])
          * manage the lifetime of the associated ast_pipelines.
          * Otherwise, freeing here will cause use-after-free errors.
          */
+        free(cmdline);
+        free(historyElem);
         free(cline);
     }
 
@@ -712,6 +740,18 @@ static void exe_pipelines(struct ast_pipeline *pipee)
         }
         ast_pipeline_free(pipee);
     }
+    else if (strcmp(command->argv[0], "history") == 0)
+    {
+        // Display the command history
+        HIST_ENTRY **histList = history_list();
+        int history_len = history_length;
+
+        for (int i = 0; i < history_len; i++)
+        {
+            printf("  %d %s\n", i + 1, histList[i]->line);
+        }
+        ast_pipeline_free(pipee);
+    }
 
     else
     {
@@ -836,7 +876,7 @@ static void non_built_in(struct ast_pipeline *pipee, struct ast_command *command
 
     // create the first process, this is considered the gpid
     // if successful, update job
-    if (posix_spawnp(&gpid, command->argv[0], &child_file_attr, &child_spawn_attr, command->argv, environ))
+    if (posix_spawnp(&gpid, command->argv[0], &child_file_attr, &child_spawn_attr, command->argv, environ) != 0)
     {
         utils_error("%s: No such file or directory\n", command->argv[0]);
         // clean the parent process attr and file
@@ -880,8 +920,7 @@ static void non_built_in(struct ast_pipeline *pipee, struct ast_command *command
     // close the parent process pipes
     if (pipe_array != NULL)
     {
-        close(pipe_array[1]);
-    
+        close(pipeArray[1]);
     }
 
     // create other processes
@@ -917,8 +956,6 @@ static void non_built_in(struct ast_pipeline *pipee, struct ast_command *command
         if (posix_spawnattr_setflags(&child_spawn_attr, POSIX_SPAWN_SETPGROUP)) {
             utils_error("Error setting flags");
         }
-
-    
 
         // get where the pipes input and output are going to be in the pipe array
         int input = (index - 1) * 2;

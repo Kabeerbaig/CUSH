@@ -1,2 +1,3 @@
-= Tests for Custom Features
-1 gback_glob_test.py
+= Custom tests
+10 cd_test.py
+10 history_test.py
