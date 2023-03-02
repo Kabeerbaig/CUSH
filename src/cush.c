@@ -500,8 +500,7 @@ int main(int ac, char *av[])
         */
 
         using_history();
-        char *historyElem = cmdline;
-        history_expand(cmdline, &historyElem);
+        char *historyElem;
 
         int result = history_expand(cmdline, &historyElem);
         if (result)
@@ -569,7 +568,7 @@ int main(int ac, char *av[])
          * Otherwise, freeing here will cause use-after-free errors.
          */
         free(cmdline);
-
+        free(historyElem);
         free(cline);
     }
 
