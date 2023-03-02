@@ -1,18 +1,23 @@
 cush> echo neverecho never
 
 never
+Error blocking SIGCHLDNo child processes
 cush> echo goingecho going
 
 going
+Error blocking SIGCHLDNo child processes
 cush> echo to give | revecho to give | rev
 
 evig ot
+Error blocking SIGCHLDNo child processes
 cush> echo youecho you
 
 you
+Error blocking SIGCHLDNo child processes
 cush> echo upecho up
 
 up
+Error blocking SIGCHLDNo child processes
 cush> historyhistory
 
   1 echo never
@@ -21,30 +26,38 @@ cush> historyhistory
   4 echo you
   5 echo up
   6 history
+Error blocking SIGCHLDSuccess
 cush> !-2!-2
 
 echo up
 up
+Error blocking SIGCHLDNo child processes
 cush> !!!!
 
 echo up
 up
+Error blocking SIGCHLDNo child processes
 cush> !echo you!echo you
 
 echo up you
 up you
+Error blocking SIGCHLDNo child processes
 cush> !3!3
 
 echo to give | rev
 evig ot
+Error blocking SIGCHLDNo child processes
 cush> echo woowoo up arrow soonecho woowoo up arrow soon
 
 woowoo up arrow soon
+Error blocking SIGCHLDNo child processes
 cush> [A[Aecho woowoo up arrow soon[C[C[C[C[C[C[C[C[C[C[C[7Pto give | rev
 
 evig ot
+Error blocking SIGCHLDNo child processes
 cush> [A[A[Becho to give | rev[C[C[C[C[C[C[C[C[C[C[Cwoowoo up arrow soon[C[C[C[C[C[C[C[C[C[C[C[7Pto give | rev
 
 evig ot
+Error blocking SIGCHLDNo child processes
 cush> exitexit
-
+

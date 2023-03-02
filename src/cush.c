@@ -79,8 +79,8 @@ struct job
  */
 struct PIDs
 {
-    pid_t *data;     // array of PID
-    size_t size;     // max amount of PID
+    pid_t *data;      // array of PID
+    size_t size;      // max amount of PID
     size_t curr_size; // number of PID
 };
 
@@ -523,7 +523,8 @@ int main(int ac, char *av[])
         HANDLE COMMAND LINE HERE
         =====================================================================================================
         */
-        if (signal_block(SIGCHLD)) {
+        if (signal_block(SIGCHLD))
+        {
             utils_error("Error blocking SIGCHLD");
         }
         list_front(&cline->pipes);
@@ -535,10 +536,11 @@ int main(int ac, char *av[])
             struct ast_pipeline *pipee = list_entry(e, struct ast_pipeline, elem);
 
             e = list_remove(e);
-            exePipelines(pipee);
+            exe_pipelines(pipee);
         }
 
-        if (signal_unblock(SIGCHLD)) {
+        if (!signal_unblock(SIGCHLD))
+        {
             utils_error("Error blocking SIGCHLD");
         }
 
@@ -665,7 +667,8 @@ static void exe_pipelines(struct ast_pipeline *pipee)
                 printf("\n");
 
                 termstate_give_terminal_to(state, sjob->pgid);
-                if (killpg(sjob->pgid, SIGCONT)) {
+                if (killpg(sjob->pgid, SIGCONT))
+                {
                     utils_error("Error sending SIGCONT in fg");
                 }
                 wait_for_job(sjob);
@@ -693,7 +696,8 @@ static void exe_pipelines(struct ast_pipeline *pipee)
             else if (sjob->jid == id)
             {
                 sjob->status = STOPPED;
-                if (killpg(sjob->pgid, SIGSTOP)) {
+                if (killpg(sjob->pgid, SIGSTOP))
+                {
                     utils_error("Error dending SIGSTOP in stop");
                 }
                 termstate_give_terminal_back_to_shell();
@@ -719,9 +723,10 @@ static void exe_pipelines(struct ast_pipeline *pipee)
             }
             else if (sjob->jid == id)
             {
-               if (killpg(sjob->pgid, SIGKILL)) {
-                utils_error("Error sending SIGKILL in kill");
-               }
+                if (killpg(sjob->pgid, SIGKILL))
+                {
+                    utils_error("Error sending SIGKILL in kill");
+                }
                 termstate_give_terminal_back_to_shell();
             }
         }
@@ -769,10 +774,12 @@ static void non_built_in(struct ast_pipeline *pipee, struct ast_command *command
     posix_spawn_file_actions_t child_file_attr;
     posix_spawnattr_t child_spawn_attr;
 
-    if (posix_spawn_file_actions_init(&child_file_attr)) {
+    if (posix_spawn_file_actions_init(&child_file_attr))
+    {
         utils_error("Error initializing child file attr");
     }
-    if (posix_spawnattr_init(&child_spawn_attr)) {
+    if (posix_spawnattr_init(&child_spawn_attr))
+    {
         utils_error("Error initializing child spawn attr");
     }
 
@@ -785,36 +792,40 @@ static void non_built_in(struct ast_pipeline *pipee, struct ast_command *command
 
     // new process sets gpid as its own pid
     pid_t gpid;
-    if (posix_spawnattr_setpgroup(&child_spawn_attr, 0)) {
+    if (posix_spawnattr_setpgroup(&child_spawn_attr, 0))
+    {
         utils_error("Error storing child spawn attr pgroup");
-
     }
 
     // set up for foreground process
     if (!pipee->bg_job)
     {
-        if (posix_spawnattr_tcsetpgrp_np(&child_spawn_attr, termstate_get_tty_fd())) {
+        if (posix_spawnattr_tcsetpgrp_np(&child_spawn_attr, termstate_get_tty_fd()))
+        {
             utils_error("Error in terminal access setup");
         }
 
-        if (posix_spawnattr_setflags(&child_spawn_attr, POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_USEVFORK | POSIX_SPAWN_TCSETPGROUP)) {
+        if (posix_spawnattr_setflags(&child_spawn_attr, POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_USEVFORK | POSIX_SPAWN_TCSETPGROUP))
+        {
             utils_error("Error could not set proper flags for child spawn attr");
         }
         cur_job->status = FOREGROUND;
     }
     else
     {
-        if (posix_spawnattr_setflags(&child_spawn_attr, POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_USEVFORK)) {
+        if (posix_spawnattr_setflags(&child_spawn_attr, POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_USEVFORK))
+        {
             utils_error("Error could not set proper flags for child spawn attr");
         }
         cur_job->status = BACKGROUND;
     }
 
     // Manages of the input pipe
-    if (pipee->iored_input) {
-        if (posix_spawn_file_actions_addopen(&child_file_attr, fileno(stdin), pipee->iored_input, O_RDWR, 0666)) {
+    if (pipee->iored_input)
+    {
+        if (posix_spawn_file_actions_addopen(&child_file_attr, fileno(stdin), pipee->iored_input, O_RDWR, 0666))
+        {
             utils_error("Error chould not open child file arrt I/O");
-
         }
     }
 
@@ -840,37 +851,42 @@ static void non_built_in(struct ast_pipeline *pipee, struct ast_command *command
 
         pipe2(&pipe_array[0], O_CLOEXEC);
 
-        if (posix_spawn_file_actions_adddup2(&child_file_attr, pipe_array[1], fileno(stdout))) {
+        if (posix_spawn_file_actions_adddup2(&child_file_attr, pipe_array[1], fileno(stdout)))
+        {
             utils_error("Error calling dup2 on file descriptors");
-
         }
         if (command->dup_stderr_to_stdout)
         {
-            if (posix_spawn_file_actions_adddup2(&child_file_attr, pipe_array[1], fileno(stderr))) {
-                 utils_error("Error calling dup2 on file descriptors");
-
+            if (posix_spawn_file_actions_adddup2(&child_file_attr, pipe_array[1], fileno(stderr)))
+            {
+                utils_error("Error calling dup2 on file descriptors");
             }
         }
         index++;
     }
-    //check to see if the pipe is null or only has one command. sets up pipes demendind on the current pipe state
-    else if (pipee->iored_output) {
+    // check to see if the pipe is null or only has one command. sets up pipes demendind on the current pipe state
+    else if (pipee->iored_output)
+    {
         int term;
-        if (pipee->append_to_output) {
+        if (pipee->append_to_output)
+        {
             term = O_APPEND;
         }
-        else {
+        else
+        {
             term = O_TRUNC;
         }
-            if (posix_spawn_file_actions_addopen(&child_file_attr, fileno(stdout), pipee->iored_output,O_WRONLY | term | O_CREAT, 0666)) {
-                utils_error("Error chould not open child file arrt I/O");
-            }
+        if (posix_spawn_file_actions_addopen(&child_file_attr, fileno(stdout), pipee->iored_output, O_WRONLY | term | O_CREAT, 0666))
+        {
+            utils_error("Error chould not open child file arrt I/O");
+        }
 
-        if (command->dup_stderr_to_stdout) {
-           if (posix_spawn_file_actions_adddup2(&child_file_attr, fileno(stdout), fileno(stderr))) {
+        if (command->dup_stderr_to_stdout)
+        {
+            if (posix_spawn_file_actions_adddup2(&child_file_attr, fileno(stdout), fileno(stderr)))
+            {
                 utils_error("Error calling dup2 on file descriptors");
-
-           }
+            }
         }
     }
 
@@ -904,23 +920,22 @@ static void non_built_in(struct ast_pipeline *pipee, struct ast_command *command
         add_PID(cur_job->PID_list, gpid);
         cur_job->pgid = gpid;
         cur_job->num_processes_alive++;
-    
     }
 
     // clean the parent process attr and file
-    if (posix_spawn_file_actions_destroy(&child_file_attr)) {
+    if (posix_spawn_file_actions_destroy(&child_file_attr))
+    {
         utils_error("Error destroying file actions");
-
     }
-    if (posix_spawnattr_destroy(&child_spawn_attr)) {
+    if (posix_spawnattr_destroy(&child_spawn_attr))
+    {
         utils_error("Error destroying attr");
-
     }
 
     // close the parent process pipes
     if (pipe_array != NULL)
     {
-        close(pipeArray[1]);
+        close(pipe_array[1]);
     }
 
     // create other processes
@@ -942,18 +957,22 @@ static void non_built_in(struct ast_pipeline *pipee, struct ast_command *command
         posix_spawn_file_actions_t child_file_attr;
         posix_spawnattr_t child_spawn_attr;
 
-        if (posix_spawn_file_actions_init(&child_file_attr) != 0){
+        if (posix_spawn_file_actions_init(&child_file_attr) != 0)
+        {
             utils_error("failure initalizing file actions");
         }
-        if (posix_spawnattr_init(&child_spawn_attr)) {
+        if (posix_spawnattr_init(&child_spawn_attr))
+        {
             utils_error("failure initalizing child spawn attr");
         }
 
         // set gpid
-        if (posix_spawnattr_setpgroup(&child_spawn_attr, gpid)) {
+        if (posix_spawnattr_setpgroup(&child_spawn_attr, gpid))
+        {
             utils_error("Error setting pgroup");
         }
-        if (posix_spawnattr_setflags(&child_spawn_attr, POSIX_SPAWN_SETPGROUP)) {
+        if (posix_spawnattr_setflags(&child_spawn_attr, POSIX_SPAWN_SETPGROUP))
+        {
             utils_error("Error setting flags");
         }
 
@@ -962,7 +981,8 @@ static void non_built_in(struct ast_pipeline *pipee, struct ast_command *command
         int output = (index * 2) + 1;
 
         // wire process inputs
-        if (posix_spawn_file_actions_adddup2(&child_file_attr, pipe_array[input], fileno(stdin))) {
+        if (posix_spawn_file_actions_adddup2(&child_file_attr, pipe_array[input], fileno(stdin)))
+        {
             utils_error("Error calling dup2 on file descriptors");
         }
 
@@ -971,35 +991,43 @@ static void non_built_in(struct ast_pipeline *pipee, struct ast_command *command
         {
             // printf("Current pipes input: %d, output: %d being wired to: %d\n", input, output, (index * 2));
             pipe2(&pipe_array[index * 2], O_CLOEXEC);
-            if (posix_spawn_file_actions_adddup2(&child_file_attr, pipe_array[output], fileno(stdout))) {
+            if (posix_spawn_file_actions_adddup2(&child_file_attr, pipe_array[output], fileno(stdout)))
+            {
                 utils_error("Error calling dup2 on file descriptors");
             }
             if (command->dup_stderr_to_stdout)
             {
-               if (posix_spawn_file_actions_adddup2(&child_file_attr, pipe_array[output], fileno(stderr))) {
-                utils_error("Error calling dup2 on file descriptors");
-               }
+                if (posix_spawn_file_actions_adddup2(&child_file_attr, pipe_array[output], fileno(stderr)))
+                {
+                    utils_error("Error calling dup2 on file descriptors");
+                }
             }
             index++;
         }
-        else if (pipee->iored_output) {
-        int term;
-        if (pipee->append_to_output) {
-            term = O_APPEND;
-        }
-        else {
-            term = O_TRUNC;
-        }
-         if (posix_spawn_file_actions_addopen(&child_file_attr, fileno(stdout), pipee->iored_output,O_WRONLY | term | O_CREAT, 0666)) {
-            utils_error("Error opening file actions");
-         }
+        else if (pipee->iored_output)
+        {
+            int term;
+            if (pipee->append_to_output)
+            {
+                term = O_APPEND;
+            }
+            else
+            {
+                term = O_TRUNC;
+            }
+            if (posix_spawn_file_actions_addopen(&child_file_attr, fileno(stdout), pipee->iored_output, O_WRONLY | term | O_CREAT, 0666))
+            {
+                utils_error("Error opening file actions");
+            }
 
-        if (command->dup_stderr_to_stdout) {
-           if ( posix_spawn_file_actions_adddup2(&child_file_attr, fileno(stdout), fileno(stderr))) {
-            utils_error("Error calling dup2 on file descriptors");
-           }
+            if (command->dup_stderr_to_stdout)
+            {
+                if (posix_spawn_file_actions_adddup2(&child_file_attr, fileno(stdout), fileno(stderr)))
+                {
+                    utils_error("Error calling dup2 on file descriptors");
+                }
+            }
         }
-    }
 
         // if spawn successful, update job
         if (posix_spawnp(&spawnPID, command->argv[0], &child_file_attr, &child_spawn_attr, command->argv, environ))
@@ -1025,11 +1053,12 @@ static void non_built_in(struct ast_pipeline *pipee, struct ast_command *command
         }
 
         // clean the process attr and file
-        if (posix_spawnattr_destroy(&child_spawn_attr)) {
+        if (posix_spawnattr_destroy(&child_spawn_attr))
+        {
             utils_error("Error destroying attr");
-
         }
-        if (posix_spawn_file_actions_destroy(&child_file_attr)) {
+        if (posix_spawn_file_actions_destroy(&child_file_attr))
+        {
             utils_error("Error destroying file actions");
         }
 
