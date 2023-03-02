@@ -415,16 +415,18 @@ handle_child_status(pid_t pid, int status)
                 newJobStructure->status = DONE;
             }
         }
+        // signal
         else if (WIFSIGNALED(status))
         {
-            newJobStructure->num_processes_alive--;
-            if (newJobStructure->num_processes_alive == 0)
-            {
-                newJobStructure->status = DELETE;
-            }
+            // newJobStructure->num_processes_alive--;
+            // if (newJobStructure->num_processes_alive == 0)
+            // {
+            //     newJobStructure->status = DELETE;
+            // }
+            newJobStructure->status = DELETE;
 
             int term_sig = WTERMSIG(status);
-            printf(strsignal(term_sig));
+            printf("%s\n", strsignal(term_sig));
         }
         else
         {
@@ -500,9 +502,11 @@ int main(int ac, char *av[])
         signal_block(SIGCHLD);
         list_front(&cline->pipes);
         // loop through the command line and execute the different pipes
-        for (struct list_elem *e = list_begin(&cline->pipes); e != list_end(&cline->pipes); e = list_next(e))
+        for (struct list_elem *e = list_begin(&cline->pipes); e != list_end(&cline->pipes);)
         {
             struct ast_pipeline *pipee = list_entry(e, struct ast_pipeline, elem);
+            e = list_remove(e);
+
             exePipelines(pipee);
         }
 
@@ -680,6 +684,7 @@ static void exePipelines(struct ast_pipeline *pipee)
             else if (sjob->jid == id)
             {
                 killpg(sjob->pgid, SIGKILL);
+                termstate_give_terminal_back_to_shell();
             }
         }
         ast_pipeline_free(pipee);
@@ -820,12 +825,12 @@ static void nonBuiltIn(struct ast_pipeline *pipee, struct ast_command *command)
         posix_spawn_file_actions_t child_file_attr;
         posix_spawnattr_t child_spawn_attr;
 
+        posix_spawn_file_actions_init(&child_file_attr);
+        posix_spawnattr_init(&child_spawn_attr);
+
         // set gpid
         posix_spawnattr_setpgroup(&child_spawn_attr, gpid);
         posix_spawnattr_setflags(&child_spawn_attr, POSIX_SPAWN_SETPGROUP);
-
-        posix_spawn_file_actions_init(&child_file_attr);
-        posix_spawnattr_init(&child_spawn_attr);
 
         // get where the pipes input and output are going to be in the pipe array
         int input = (index - 1) * 2;
