@@ -1,0 +1,43 @@
+cush> sleep 10 | sleep 9sleep 10 | sleep 9
+
+^Z[1]	Stopped		(sleep 10| sleep 9)
+cush> jobsjobs
+
+[1]	Stopped		(sleep 10| sleep 9)
+cush> bg 1bg 1
+
+[1] 623598
+cush> jobsjobs
+
+[1]	Running		(sleep 10| sleep 9)
+cush> kill 1kill 1
+
+cush> ps --ppid 623596 -o pid,cmd,stat --no-headers | wc -lKilledps --ppid 623596 -o pid,cmd,stat --no-headers | wc -l
+
+3
+cush> sleep 100 | sleep 99 | sleep 98 | sleep 97 &sleep 100 | sleep 99 | sleep 98 | sleep 97 &
+
+[2] 623613
+cush> ps --ppid 623596 -o pid,stat,comm --no-headersps --ppid 623596 -o pid,stat,comm --no-headers
+
+ 623599 S    sleep
+ 623613 S    sleep
+ 623614 S    sleep
+ 623615 S    sleep
+ 623616 S    sleep
+ 623617 R+   ps
+cush> jobsjobs
+
+[1]	Running		(sleep 10| sleep 9)
+[2]	Running		(sleep 100| sleep 99| sleep 98| sleep 97)
+cush> stop 1stop 1
+
+cush> ps --ppid 623596 -o pid,stat,comm --no-headersps --ppid 623596 -o pid,stat,comm --no-headers
+
+ 623599 S    sleep
+ 623613 S    sleep
+ 623614 S    sleep
+ 623615 S    sleep
+ 623616 S    sleep
+ 623618 R+   ps
+cush> 
